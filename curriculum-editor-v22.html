@@ -1132,17 +1132,9 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
         <span>GitHub Sync</span>
       </div>
       <div class="gh-panel-body" id="ghPanelBody">
-        <!-- File URL hidden — auto-filled from active repo hint in background -->
-        <input type="search" id="ghFileUrl" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="ghSaveSettings()">
-        <!-- Token is set automatically via login (PIN-decrypted) — no manual input needed -->
-        <div class="gh-token-wrap">
-          <input type="search" class="gh-token" id="ghToken" placeholder="Personal Access Token (repo scope)"
-            autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-masked="1"
-            oninput="ghSaveToken()" onfocus="ghTokenFocus(this)" onblur="ghTokenBlur(this)"
-            style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);letter-spacing:2px;padding-right:32px;">
-          <button type="button" class="gh-token-eye" id="ghTokenEye" onclick="ghTokenToggleEye()" title="Show/hide token"
-            style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px 4px;line-height:1;">👁</button>
-        </div>
+        <!-- URL and token auto-filled from Supabase login — no manual input needed -->
+        <input type="hidden" id="ghFileUrl">
+        <input type="hidden" id="ghToken" data-masked="1">
         <div class="gh-row">
           <button class="btn btn-sm" onclick="ghFetch()">⬇ Pull</button>
           <button class="btn btn-sm btn-success" onclick="ghPushModal()">⬆ Push</button>
@@ -2716,9 +2708,8 @@ function ghClearStatus() {
 }
 
 function ghGetFields() {
-  const tokenInp = document.getElementById('ghToken');
-  const token = (tokenInp.dataset.real !== undefined ? tokenInp.dataset.real : tokenInp.value).trim();
-  const url    = document.getElementById('ghFileUrl').value.trim();
+  const token = _sessionGhToken || localStorage.getItem('ej-gh-token') || '';
+  const url   = localStorage.getItem('ej-gh-fileurl') || localStorage.getItem('ej-active-file-hint') || '';
   const parsed = ghParseUrl(url);
   if (!parsed) return { token, repo: '', path: '', branch: 'main' };
   return { token, repo: parsed.repo, path: parsed.path, branch: parsed.branch };
@@ -3039,21 +3030,9 @@ window.addEventListener('load', () => {
       GitHub Sync
     </div>
     <div class="mob-files-body" id="mobGhBody">
-      <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
-        <input type="text" name="mob_fake_u" tabindex="-1" autocomplete="username">
-        <input type="password" name="mob_fake_p" tabindex="-1" autocomplete="current-password">
-      </div>
-      <!-- File URL hidden — auto-filled from active repo hint in background -->
-      <input type="search" class="mob-files-input" id="mobGhFileUrl" style="display:none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="mobSyncGhUrl()">
-      <!-- Token auto-set via login — hidden -->
-      <div style="display:none;">
-        <input type="search" class="mob-files-input" id="mobGhToken" placeholder="Personal Access Token"
-          autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-masked="1"
-          oninput="mobSyncGhToken()" onfocus="ghTokenFocus(this)" onblur="ghTokenBlur(this)"
-          style="padding-right:36px;font-family:var(--font-mono);font-size:11px;letter-spacing:2px;">
-        <button type="button" onclick="ghTokenToggleEye()" title="Show/hide"
-          style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px 4px;line-height:1;">👁</button>
-      </div>
+      <!-- URL and token auto-filled from Supabase login -->
+      <input type="hidden" id="mobGhFileUrl">
+      <input type="hidden" id="mobGhToken" data-masked="1">
       <div class="mob-files-row">
         <button class="btn btn-sm" onclick="ghFetch()">⬇ Pull</button>
         <button class="btn btn-sm btn-success" onclick="ghPushModal()">⬆ Push</button>

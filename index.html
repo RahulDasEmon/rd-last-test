@@ -43,9 +43,15 @@
       'ads2.opensurvey.net','pagead2.googlesyndication.com','ads.rubiconproject.com'
     ];
 
+    /* Domains that must NEVER be blocked (our own services) */
+    const WHITELIST_DOMAINS = [
+      'inv.thepixora.com', 'thepixora.com'
+    ];
+
     function isDomainBlocked(url) {
       try {
         const host = new URL(url).hostname.toLowerCase();
+        if (WHITELIST_DOMAINS.some(d => host === d || host.endsWith('.' + d))) return false;
         return BLOCKED_DOMAINS.some(d => host === d || host.endsWith('.' + d));
       } catch { return false; }
     }
@@ -1979,6 +1985,23 @@
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     Settings
   </button>
+  <!-- SERVER SELECT in 3-line menu -->
+  <button class="drawer-item" onclick="toggleDrawerSub('drawerServerSub',this)">
+    <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+    Player Server
+    <span id="drawerServerLabel" style="margin-left:auto;font-size:.75rem;color:var(--accent);font-weight:700;">YouTube</span>
+    <svg viewBox="0 0 24 24" style="margin-left:6px;width:14px;height:14px;color:var(--text-muted)"><polyline points="6 9 12 15 18 9"/></svg>
+  </button>
+  <div class="drawer-sub" id="drawerServerSub">
+    <button class="drawer-sub-item" id="drawerSrvYT" onclick="drawerSetServer('youtube')" style="font-weight:600;">
+      <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:var(--accent);fill:none;stroke-width:2;flex-shrink:0;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      YouTube <span style="margin-left:4px;font-size:.7rem;opacity:.6;">(Default)</span>
+    </button>
+    <button class="drawer-sub-item" id="drawerSrvPixora" onclick="drawerSetServer('pixora')">
+      <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:var(--accent);fill:none;stroke-width:2;flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Ad-Free (Pixora)
+    </button>
+  </div>
   <div class="drawer-divider"></div>
   <button class="drawer-item" onclick="closeMobileDrawer();openListPopup('history')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -2071,17 +2094,19 @@
               </button>
             </div>
 
-            <!-- Ad-free source toggle -->
-            <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-left:auto;">
-              <button class="ctrl-icon-btn" id="source-toggle-btn"
-                onclick="togglePlayerSource(event)"
-                title="Switch player source"
-                style="padding:4px 8px;font-size:0.7rem;font-weight:700;letter-spacing:.5px;min-width:68px;justify-content:center;gap:4px;">
-                <svg class="cib-icon" viewBox="0 0 24 24" style="width:13px;height:13px;">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
-                <span id="source-label">YouTube</span>
+            <!-- 3-dot server menu -->
+            <div onclick="event.stopPropagation()" style="margin-left:auto;">
+              <button class="ctrl-icon-btn" id="server-dots-btn"
+                onclick="toggleCtrlPanel('server-popup','server-dots-btn')"
+                onpointerdown="selectOpen=true;clearTimeout(hudTimer);showHud()"
+                title="Select player server"
+                style="flex-direction:column;gap:2px;">
+                <span style="display:block;width:3px;height:3px;border-radius:50%;background:currentColor;"></span>
+                <span style="display:block;width:3px;height:3px;border-radius:50%;background:currentColor;"></span>
+                <span style="display:block;width:3px;height:3px;border-radius:50%;background:currentColor;"></span>
               </button>
+              <!-- hidden source-toggle-btn kept for JS compat -->
+              <button id="source-toggle-btn" style="display:none;"></button>
             </div>
 
             <button class="fs-btn" onclick="initFullscreen(event)" title="Fullscreen">
@@ -2122,6 +2147,21 @@
           <button class="q-pill" data-q="large"  onclick="setQuality('large',this)">480p</button>
           <button class="q-pill" data-q="medium" onclick="setQuality('medium',this)">360p</button>
           <button class="q-pill" data-q="small"  onclick="setQuality('small',this)">240p</button>
+        </div>
+      </div>
+      <!-- Server select popup (3-dot menu) -->
+      <div class="ctrl-popup" id="server-popup" onclick="event.stopPropagation()" style="width:220px;right:10px;left:auto;bottom:70px;">
+        <div class="ctrl-popup-title">Player Server</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <button id="srvBtnYT" class="srv-option srv-active" onclick="playerSetServer('youtube',this)" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:color-mix(in srgb,var(--accent) 15%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--text-primary);font-size:.83rem;font-weight:700;cursor:pointer;font-family:var(--font-body);width:100%;text-align:left;">
+            <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--accent);fill:none;stroke-width:2.5;flex-shrink:0;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            YouTube
+            <span style="margin-left:auto;font-size:.65rem;opacity:.6;">Default</span>
+          </button>
+          <button id="srvBtnPixora" class="srv-option" onclick="playerSetServer('pixora',this)" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:transparent;border:1px solid var(--border);color:var(--text-secondary);font-size:.83rem;font-weight:600;cursor:pointer;font-family:var(--font-body);width:100%;text-align:left;">
+            <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Ad-Free (Pixora)
+          </button>
         </div>
       </div>
 
@@ -3493,16 +3533,73 @@ function togglePlayerSource(e) {
 
 /* ── Update the source button UI ── */
 function _syncSourceUI() {
-  const btn   = document.getElementById('source-toggle-btn');
-  const label = document.getElementById('source-label');
-  if (!btn || !label) return;
-  btn.classList.remove('inv-active', 'inv-checking');
-  if (_useInvidious) {
-    btn.classList.add('inv-active');
-    label.textContent = '✓ Pixora';
-  } else {
-    label.textContent = 'YouTube';
+  // Update hidden legacy btn (kept for compat)
+  const btn = document.getElementById('source-toggle-btn');
+  if (btn) {
+    btn.classList.remove('inv-active', 'inv-checking');
+    if (_useInvidious) btn.classList.add('inv-active');
   }
+  // Update 3-dot server popup buttons
+  const ytBtn  = document.getElementById('srvBtnYT');
+  const pxBtn  = document.getElementById('srvBtnPixora');
+  const acStyle = 'background:color-mix(in srgb,var(--accent) 15%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--text-primary);font-weight:700;';
+  const inStyle = 'background:transparent;border:1px solid var(--border);color:var(--text-secondary);font-weight:600;';
+  if (ytBtn && pxBtn) {
+    if (_useInvidious) {
+      ytBtn.style.cssText  = ytBtn.style.cssText.replace(/background[^;]+;/g,'') + inStyle;
+      pxBtn.style.cssText  = pxBtn.style.cssText.replace(/background[^;]+;/g,'') + acStyle;
+    } else {
+      ytBtn.style.cssText  = ytBtn.style.cssText.replace(/background[^;]+;/g,'') + acStyle;
+      pxBtn.style.cssText  = pxBtn.style.cssText.replace(/background[^;]+;/g,'') + inStyle;
+    }
+  }
+  // Update drawer label
+  const dLabel = document.getElementById('drawerServerLabel');
+  if (dLabel) dLabel.textContent = _useInvidious ? 'Ad-Free' : 'YouTube';
+  // Highlight drawer server items
+  const dYT = document.getElementById('drawerSrvYT');
+  const dPX = document.getElementById('drawerSrvPixora');
+  if (dYT && dPX) {
+    dYT.style.color = _useInvidious ? '' : 'var(--accent)';
+    dPX.style.color = _useInvidious ? 'var(--accent)' : '';
+  }
+}
+
+/* ── Server select helpers (3-dot popup + drawer) ── */
+function playerSetServer(server, clickedBtn) {
+  const wantPixora = (server === 'pixora');
+  if (wantPixora === _useInvidious) {
+    toggleCtrlPanel('server-popup','server-dots-btn'); // close
+    return;
+  }
+  _useInvidious = wantPixora;
+  settingsState.useInvidious = _useInvidious;
+  saveSettings();
+  if (!_useInvidious) {
+    _stopInvPoll(); _unloadInvidious(); _syncSourceUI();
+    if (currentVideoId && playerReady && mainPlayer?.loadVideoById) doLoadVideo(currentVideoId);
+  } else {
+    if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
+    if (currentVideoId) _loadInvidious(currentVideoId); else _syncSourceUI();
+  }
+  toggleCtrlPanel('server-popup','server-dots-btn'); // close popup
+}
+function drawerSetServer(server) {
+  const wantPixora = (server === 'pixora');
+  if (wantPixora !== _useInvidious) {
+    _useInvidious = wantPixora;
+    settingsState.useInvidious = _useInvidious;
+    saveSettings();
+    if (!_useInvidious) {
+      _stopInvPoll(); _unloadInvidious(); _syncSourceUI();
+      if (currentVideoId && playerReady && mainPlayer?.loadVideoById) doLoadVideo(currentVideoId);
+    } else {
+      if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
+      if (currentVideoId) _loadInvidious(currentVideoId); else _syncSourceUI();
+    }
+  }
+  // visual feedback in drawer
+  _syncSourceUI();
 }
 
 // Init from saved setting

@@ -13,6 +13,208 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="application-name" content="Eduyomi">
   <meta name="description" content="Eduyomi — Free Education Portal. Learn anything, anytime.">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       BUILT-IN AD BLOCKER (AdGuard-style, no extension needed)
+       Blocks ad scripts, hides ad elements, intercepts popups
+  ════════════════════════════════════════════════════════════════ -->
+  <script>
+  (function() {
+    'use strict';
+
+    /* ── 1. BLOCKED AD DOMAINS ──────────────────────────────────
+       Any script/resource from these domains is silently dropped */
+    const BLOCKED_DOMAINS = [
+      'doubleclick.net','googlesyndication.com','googletagmanager.com',
+      'googletagservices.com','adservice.google.com','adnxs.com',
+      'advertising.com','ads.yahoo.com','amazon-adsystem.com',
+      'media.net','outbrain.com','taboola.com','revcontent.com',
+      'popads.net','popcash.net','propellerads.com','adcash.com',
+      'adcolony.com','admob.com','applovin.com','unity3d.com',
+      'moatads.com','openx.net','rubiconproject.com','pubmatic.com',
+      'appnexus.com','criteo.com','casalemedia.com','quantserve.com',
+      'scorecardresearch.com','zedo.com','adbrite.com','chitika.net',
+      'clicksor.com','etarget.net','exoclick.com','hilltopads.net',
+      'juicyads.com','traffichunt.com','trafficholder.com','yllix.com',
+      'adsterra.com','clickadu.com','richpush.co','evadav.com',
+      'mgid.com','content.ad','valueclick.com','conversantmedia.com',
+      'mathtag.com','bluekai.com','demdex.net','adsafeprotected.com',
+      'adsymptotic.com','tpc.googlesyndication.com','ads.pubmatic.com',
+      'ads2.opensurvey.net','pagead2.googlesyndication.com','ads.rubiconproject.com'
+    ];
+
+    function isDomainBlocked(url) {
+      try {
+        const host = new URL(url).hostname.toLowerCase();
+        return BLOCKED_DOMAINS.some(d => host === d || host.endsWith('.' + d));
+      } catch { return false; }
+    }
+
+    /* ── 2. INTERCEPT fetch() ───────────────────────────────────*/
+    const _fetch = window.fetch;
+    window.fetch = function(input, init) {
+      const url = (input instanceof Request) ? input.url : String(input);
+      if (isDomainBlocked(url)) {
+        console.debug('[AdBlock] Blocked fetch:', url);
+        return Promise.reject(new Error('Blocked by built-in ad blocker'));
+      }
+      return _fetch.apply(this, arguments);
+    };
+
+    /* ── 3. INTERCEPT XMLHttpRequest ────────────────────────────*/
+    const _XHROpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url) {
+      if (isDomainBlocked(String(url))) {
+        console.debug('[AdBlock] Blocked XHR:', url);
+        this._adblocked = true;
+      }
+      return _XHROpen.apply(this, arguments);
+    };
+    const _XHRSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function() {
+      if (this._adblocked) return;
+      return _XHRSend.apply(this, arguments);
+    };
+
+    /* ── 4. BLOCK <script> / <iframe> injection via DOM ─────────
+       Intercept createElement so ad scripts never load           */
+    const _createElement = document.createElement.bind(document);
+    document.createElement = function(tag) {
+      const el = _createElement(tag);
+      const tagL = tag.toLowerCase();
+      if (tagL === 'script' || tagL === 'iframe' || tagL === 'img') {
+        const _setSrc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'src') ||
+                        Object.getOwnPropertyDescriptor(Element.prototype, 'src');
+        Object.defineProperty(el, 'src', {
+          set(val) {
+            if (val && isDomainBlocked(String(val))) {
+              console.debug('[AdBlock] Blocked element src:', val);
+              return;
+            }
+            if (_setSrc && _setSrc.set) _setSrc.set.call(el, val);
+            else el.setAttribute('src', val);
+          },
+          get() {
+            if (_setSrc && _setSrc.get) return _setSrc.get.call(el);
+            return el.getAttribute('src');
+          },
+          configurable: true
+        });
+      }
+      return el;
+    };
+
+    /* ── 5. BLOCK window.open (popup ads) ───────────────────────*/
+    const _windowOpen = window.open;
+    window.open = function(url, ...rest) {
+      if (!url || isDomainBlocked(String(url))) {
+        console.debug('[AdBlock] Blocked popup:', url);
+        return null;
+      }
+      return _windowOpen.apply(this, [url, ...rest]);
+    };
+
+    /* ── 6. BLOCK navigation redirects to ad sites ──────────────*/
+    window.addEventListener('beforeunload', function(e) {}, true);
+
+    /* ── 7. CSS — hide common ad element patterns ───────────────*/
+    const adCSS = `
+      /* Ad iframes & banners */
+      iframe[src*="doubleclick"],iframe[src*="googlesyndication"],
+      iframe[src*="adnxs"],iframe[src*="moatads"],iframe[src*="openx"],
+      iframe[src*="rubiconproject"],iframe[src*="pubmatic"],
+      iframe[src*="taboola"],iframe[src*="outbrain"],
+      iframe[src*="criteo"],iframe[src*="exoclick"],
+      iframe[src*="adsterra"],iframe[src*="propellerads"],
+      iframe[id*="google_ads"],iframe[id*="aswift"],
+      iframe[name*="google_ads"],
+      /* Common ad div IDs & classes */
+      div[id*="ad-"],div[id*="-ad"],div[id*="ads-"],div[id*="-ads"],
+      div[id*="advert"],div[id*="advertisement"],div[id*="adframe"],
+      div[id*="ad_unit"],div[id*="adslot"],div[id*="adzone"],
+      div[id*="banner_ad"],div[id*="sponsor"],
+      div[class*=" ad "],div[class*=" ads "],div[class*="advert"],
+      div[class*="advertisement"],div[class*="ad-banner"],
+      div[class*="ad-container"],div[class*="ad-wrapper"],
+      div[class*="ad-block"],div[class*="adbox"],div[class*="adslot"],
+      div[class*="adsense"],div[class*="adunit"],
+      div[class*="taboola"],div[class*="outbrain"],
+      div[class*="sponsored-content"],div[class*="sponsored_post"],
+      div[class*="native-ad"],div[class*="native_ad"],
+      /* Overlay/popup ads */
+      div[id*="popup"],div[id*="pop-up"],div[id*="popunder"],
+      div[class*="popup-ad"],div[class*="pop-up-ad"],
+      div[class*="interstitial"],div[id*="interstitial"],
+      /* Google AdSense specific */
+      ins.adsbygoogle,
+      /* Sticky bottom / floating ads */
+      div[class*="sticky-ad"],div[class*="float-ad"],div[class*="fixed-ad"],
+      /* Video ads */
+      div[class*="video-ad"],div[id*="video-ad"],
+      div[class*="preroll"],div[id*="preroll"]
+      { display: none !important; visibility: hidden !important;
+        width: 0 !important; height: 0 !important;
+        pointer-events: none !important; }
+    `;
+    const styleEl = _createElement('style');
+    styleEl.textContent = adCSS;
+    document.head.appendChild(styleEl);
+
+    /* ── 8. MutationObserver — remove injected ad nodes live ─────*/
+    const AD_SELECTORS = [
+      'ins.adsbygoogle',
+      'script[src*="googlesyndication"]','script[src*="doubleclick"]',
+      'script[src*="adnxs"]','script[src*="taboola"]','script[src*="outbrain"]',
+      'script[src*="adsterra"]','script[src*="propellerads"]',
+      'iframe[id*="google_ads"]','iframe[id*="aswift"]',
+      'div[id*="advert"]','div[class*="adsbygoogle"]',
+    ];
+
+    function removeAdElements(root) {
+      AD_SELECTORS.forEach(sel => {
+        try {
+          root.querySelectorAll(sel).forEach(el => {
+            console.debug('[AdBlock] Removed element:', el.tagName, el.id || el.className);
+            el.remove();
+          });
+        } catch {}
+      });
+    }
+
+    const observer = new MutationObserver(mutations => {
+      mutations.forEach(m => {
+        m.addedNodes.forEach(node => {
+          if (node.nodeType === 1) {
+            // Check if the node itself is an ad
+            AD_SELECTORS.forEach(sel => {
+              try { if (node.matches(sel)) node.remove(); } catch {}
+            });
+            // Check children
+            if (node.querySelectorAll) removeAdElements(node);
+          }
+        });
+      });
+    });
+
+    // Start observing once DOM is available
+    function startObserver() {
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+      removeAdElements(document);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', startObserver);
+    } else {
+      startObserver();
+    }
+
+    /* ── 9. STATUS INDICATOR ────────────────────────────────────*/
+    window.__adBlockerActive = true;
+    console.info('%c[Eduyomi AdBlock] ✅ Built-in ad blocker active', 'color:#7c6af7;font-weight:bold');
+
+  })();
+  </script>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
   <script>
     // Inject manifest as a blob URL so it works from a single HTML file
     (function() {

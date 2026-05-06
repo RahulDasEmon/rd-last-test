@@ -13,214 +13,6 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="application-name" content="Eduyomi">
   <meta name="description" content="Eduyomi — Free Education Portal. Learn anything, anytime.">
-
-  <!-- ═══════════════════════════════════════════════════════════
-       BUILT-IN AD BLOCKER (AdGuard-style, no extension needed)
-       Blocks ad scripts, hides ad elements, intercepts popups
-  ════════════════════════════════════════════════════════════════ -->
-  <script>
-  (function() {
-    'use strict';
-
-    /* ── 1. BLOCKED AD DOMAINS ──────────────────────────────────
-       Any script/resource from these domains is silently dropped */
-    const BLOCKED_DOMAINS = [
-      'doubleclick.net','googlesyndication.com','googletagmanager.com',
-      'googletagservices.com','adservice.google.com','adnxs.com',
-      'advertising.com','ads.yahoo.com','amazon-adsystem.com',
-      'media.net','outbrain.com','taboola.com','revcontent.com',
-      'popads.net','popcash.net','propellerads.com','adcash.com',
-      'adcolony.com','admob.com','applovin.com','unity3d.com',
-      'moatads.com','openx.net','rubiconproject.com','pubmatic.com',
-      'appnexus.com','criteo.com','casalemedia.com','quantserve.com',
-      'scorecardresearch.com','zedo.com','adbrite.com','chitika.net',
-      'clicksor.com','etarget.net','exoclick.com','hilltopads.net',
-      'juicyads.com','traffichunt.com','trafficholder.com','yllix.com',
-      'adsterra.com','clickadu.com','richpush.co','evadav.com',
-      'mgid.com','content.ad','valueclick.com','conversantmedia.com',
-      'mathtag.com','bluekai.com','demdex.net','adsafeprotected.com',
-      'adsymptotic.com','tpc.googlesyndication.com','ads.pubmatic.com',
-      'ads2.opensurvey.net','pagead2.googlesyndication.com','ads.rubiconproject.com'
-    ];
-
-    /* Domains that must NEVER be blocked (our own services) */
-    const WHITELIST_DOMAINS = [
-      'inv.thepixora.com', 'thepixora.com'
-    ];
-
-    function isDomainBlocked(url) {
-      try {
-        const host = new URL(url).hostname.toLowerCase();
-        if (WHITELIST_DOMAINS.some(d => host === d || host.endsWith('.' + d))) return false;
-        return BLOCKED_DOMAINS.some(d => host === d || host.endsWith('.' + d));
-      } catch { return false; }
-    }
-
-    /* ── 2. INTERCEPT fetch() ───────────────────────────────────*/
-    const _fetch = window.fetch;
-    window.fetch = function(input, init) {
-      const url = (input instanceof Request) ? input.url : String(input);
-      if (isDomainBlocked(url)) {
-        console.debug('[AdBlock] Blocked fetch:', url);
-        return Promise.reject(new Error('Blocked by built-in ad blocker'));
-      }
-      return _fetch.apply(this, arguments);
-    };
-
-    /* ── 3. INTERCEPT XMLHttpRequest ────────────────────────────*/
-    const _XHROpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(method, url) {
-      if (isDomainBlocked(String(url))) {
-        console.debug('[AdBlock] Blocked XHR:', url);
-        this._adblocked = true;
-      }
-      return _XHROpen.apply(this, arguments);
-    };
-    const _XHRSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.send = function() {
-      if (this._adblocked) return;
-      return _XHRSend.apply(this, arguments);
-    };
-
-    /* ── 4. BLOCK <script> / <iframe> injection via DOM ─────────
-       Intercept createElement so ad scripts never load           */
-    const _createElement = document.createElement.bind(document);
-    document.createElement = function(tag) {
-      const el = _createElement(tag);
-      const tagL = tag.toLowerCase();
-      if (tagL === 'script' || tagL === 'iframe' || tagL === 'img') {
-        const _setSrc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'src') ||
-                        Object.getOwnPropertyDescriptor(Element.prototype, 'src');
-        Object.defineProperty(el, 'src', {
-          set(val) {
-            if (val && isDomainBlocked(String(val))) {
-              console.debug('[AdBlock] Blocked element src:', val);
-              return;
-            }
-            if (_setSrc && _setSrc.set) _setSrc.set.call(el, val);
-            else el.setAttribute('src', val);
-          },
-          get() {
-            if (_setSrc && _setSrc.get) return _setSrc.get.call(el);
-            return el.getAttribute('src');
-          },
-          configurable: true
-        });
-      }
-      return el;
-    };
-
-    /* ── 5. BLOCK window.open (popup ads) ───────────────────────*/
-    const _windowOpen = window.open;
-    window.open = function(url, ...rest) {
-      if (!url || isDomainBlocked(String(url))) {
-        console.debug('[AdBlock] Blocked popup:', url);
-        return null;
-      }
-      return _windowOpen.apply(this, [url, ...rest]);
-    };
-
-    /* ── 6. BLOCK navigation redirects to ad sites ──────────────*/
-    window.addEventListener('beforeunload', function(e) {}, true);
-
-    /* ── 7. CSS — hide common ad element patterns ───────────────*/
-    const adCSS = `
-      /* Ad iframes & banners */
-      iframe[src*="doubleclick"],iframe[src*="googlesyndication"],
-      iframe[src*="adnxs"],iframe[src*="moatads"],iframe[src*="openx"],
-      iframe[src*="rubiconproject"],iframe[src*="pubmatic"],
-      iframe[src*="taboola"],iframe[src*="outbrain"],
-      iframe[src*="criteo"],iframe[src*="exoclick"],
-      iframe[src*="adsterra"],iframe[src*="propellerads"],
-      iframe[id*="google_ads"],iframe[id*="aswift"],
-      iframe[name*="google_ads"],
-      /* Common ad div IDs & classes */
-      div[id*="ad-"],div[id*="-ad"],div[id*="ads-"],div[id*="-ads"],
-      div[id*="advert"],div[id*="advertisement"],div[id*="adframe"],
-      div[id*="ad_unit"],div[id*="adslot"],div[id*="adzone"],
-      div[id*="banner_ad"],div[id*="sponsor"],
-      div[class*=" ad "],div[class*=" ads "],div[class*="advert"],
-      div[class*="advertisement"],div[class*="ad-banner"],
-      div[class*="ad-container"],div[class*="ad-wrapper"],
-      div[class*="ad-block"],div[class*="adbox"],div[class*="adslot"],
-      div[class*="adsense"],div[class*="adunit"],
-      div[class*="taboola"],div[class*="outbrain"],
-      div[class*="sponsored-content"],div[class*="sponsored_post"],
-      div[class*="native-ad"],div[class*="native_ad"],
-      /* Overlay/popup ads */
-      div[id*="popup"],div[id*="pop-up"],div[id*="popunder"],
-      div[class*="popup-ad"],div[class*="pop-up-ad"],
-      div[class*="interstitial"],div[id*="interstitial"],
-      /* Google AdSense specific */
-      ins.adsbygoogle,
-      /* Sticky bottom / floating ads */
-      div[class*="sticky-ad"],div[class*="float-ad"],div[class*="fixed-ad"],
-      /* Video ads */
-      div[class*="video-ad"],div[id*="video-ad"],
-      div[class*="preroll"],div[id*="preroll"]
-      { display: none !important; visibility: hidden !important;
-        width: 0 !important; height: 0 !important;
-        pointer-events: none !important; }
-    `;
-    const styleEl = _createElement('style');
-    styleEl.textContent = adCSS;
-    document.head.appendChild(styleEl);
-
-    /* ── 8. MutationObserver — remove injected ad nodes live ─────*/
-    const AD_SELECTORS = [
-      'ins.adsbygoogle',
-      'script[src*="googlesyndication"]','script[src*="doubleclick"]',
-      'script[src*="adnxs"]','script[src*="taboola"]','script[src*="outbrain"]',
-      'script[src*="adsterra"]','script[src*="propellerads"]',
-      'iframe[id*="google_ads"]','iframe[id*="aswift"]',
-      'div[id*="advert"]','div[class*="adsbygoogle"]',
-    ];
-
-    function removeAdElements(root) {
-      AD_SELECTORS.forEach(sel => {
-        try {
-          root.querySelectorAll(sel).forEach(el => {
-            console.debug('[AdBlock] Removed element:', el.tagName, el.id || el.className);
-            el.remove();
-          });
-        } catch {}
-      });
-    }
-
-    const observer = new MutationObserver(mutations => {
-      mutations.forEach(m => {
-        m.addedNodes.forEach(node => {
-          if (node.nodeType === 1) {
-            // Check if the node itself is an ad
-            AD_SELECTORS.forEach(sel => {
-              try { if (node.matches(sel)) node.remove(); } catch {}
-            });
-            // Check children
-            if (node.querySelectorAll) removeAdElements(node);
-          }
-        });
-      });
-    });
-
-    // Start observing once DOM is available
-    function startObserver() {
-      observer.observe(document.documentElement, { childList: true, subtree: true });
-      removeAdElements(document);
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', startObserver);
-    } else {
-      startObserver();
-    }
-
-    /* ── 9. STATUS INDICATOR ────────────────────────────────────*/
-    window.__adBlockerActive = true;
-    console.info('%c[Eduyomi AdBlock] ✅ Built-in ad blocker active', 'color:#7c6af7;font-weight:bold');
-
-  })();
-  </script>
-  <!-- ═══════════════════════════════════════════════════════════ -->
-
   <script>
     // Inject manifest as a blob URL so it works from a single HTML file
     (function() {
@@ -849,27 +641,6 @@
       transform: scale(1.08);
       transform-origin: center center;
     }
-    /* Ad-free (Pixora) mode — our native engine takes over */
-    body.pixora-mode #pixora-engine  { pointer-events: none; }
-    body.pixora-mode #youtube-engine { display: none !important; }
-    body.pixora-mode #interaction-zone { cursor: pointer; }
-    /* Source toggle active state */
-    #source-toggle-btn.inv-active {
-      background: rgba(74,222,128,0.15);
-      border-color: rgba(74,222,128,0.5);
-      color: #4ade80;
-    }
-    #source-toggle-btn.inv-active svg { stroke: #4ade80; }
-    #source-toggle-btn.inv-checking {
-      background: rgba(251,191,36,0.15);
-      border-color: rgba(251,191,36,0.4);
-      color: #fbbf24;
-      animation: inv-pulse 1s ease-in-out infinite;
-    }
-    #source-toggle-btn.inv-checking svg { stroke: #fbbf24; }
-    @keyframes inv-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
-    /* Quality pills available in pixora mode (we control the iframe) */
-    body.pixora-mode #quality-toggle-btn { opacity: 1; pointer-events: auto; }
 
     /* Controls overlay */
     .control-panel {
@@ -1811,6 +1582,68 @@
     .repo-saved-toggle svg { width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:2.5; transition: transform .2s; }
     .repo-saved-toggle.open svg { transform: rotate(180deg); }
 
+    /* ══ PIXORA NATIVE VIDEO PLAYER ══ */
+    #pixora-engine {
+      display: none;
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #000;
+      z-index: 2;
+    }
+    #pixora-engine video {
+      width: 100%; height: 100%;
+      display: block; object-fit: contain;
+    }
+
+    /* ══ SERVER SELECTION SHEET ══ */
+    #serverSheetOverlay {
+      position: fixed; inset: 0; z-index: 900;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+      opacity: 0; pointer-events: none; transition: opacity .25s;
+    }
+    #serverSheetOverlay.open { opacity: 1; pointer-events: auto; }
+    #serverSheet {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 901;
+      background: var(--bg-nav); border: 1px solid var(--border);
+      border-radius: 24px 24px 0 0;
+      transform: translateY(100%);
+      transition: transform .35s cubic-bezier(.22,1,.36,1);
+      padding-bottom: env(safe-area-inset-bottom, 12px);
+    }
+    #serverSheet.open { transform: translateY(0); }
+    .ss-handle { width: 36px; height: 4px; border-radius: 4px; background: var(--border); margin: 12px auto 0; }
+    .ss-header { padding: 14px 20px 10px; font-family: var(--font-display); font-size: 1rem; font-weight: 700; border-bottom: 1px solid var(--border); }
+    .ss-sub { font-size: .75rem; color: var(--text-muted); font-weight: 400; margin-top: 2px; font-family: var(--font-body); }
+    .ss-list { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+    .ss-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 13px 16px; border-radius: 14px;
+      border: 1.5px solid var(--border); background: var(--surface);
+      cursor: pointer; transition: all .18s;
+    }
+    .ss-item:hover { border-color: color-mix(in srgb,var(--accent) 45%,transparent); background: var(--surface-hover); }
+    .ss-item.ss-active { border-color: var(--accent); background: color-mix(in srgb,var(--accent) 10%,transparent); }
+    .ss-item-icon {
+      width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: color-mix(in srgb,var(--accent) 14%,transparent);
+      border: 1px solid color-mix(in srgb,var(--accent) 28%,transparent);
+      color: var(--accent);
+    }
+    .ss-item-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .ss-item-info { flex: 1; }
+    .ss-item-name { font-size: .9rem; font-weight: 700; color: var(--text-primary); }
+    .ss-item-desc { font-size: .73rem; color: var(--text-muted); margin-top: 2px; }
+    .ss-check {
+      width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid var(--border); display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+    }
+    .ss-item.ss-active .ss-check { background: var(--accent); border-color: var(--accent); }
+    .ss-check svg { width: 11px; height: 11px; stroke: white; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity .15s; }
+    .ss-item.ss-active .ss-check svg { opacity: 1; }
+
     /* Navbar repo button */
     .repo-nav-btn {
       height: 34px; padding: 0 12px;
@@ -1975,23 +1808,11 @@
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     Settings
   </button>
-  <!-- SERVER SELECT in 3-line menu -->
-  <button class="drawer-item" onclick="toggleDrawerSub('drawerServerSub',this)">
-    <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-    Player Server
-    <span id="drawerServerLabel" style="margin-left:auto;font-size:.75rem;color:var(--accent);font-weight:700;">YouTube</span>
-    <svg viewBox="0 0 24 24" style="margin-left:6px;width:14px;height:14px;color:var(--text-muted)"><polyline points="6 9 12 15 18 9"/></svg>
+  <button class="drawer-item" onclick="closeMobileDrawer();openServerSheet()">
+    <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+    Server
+    <span id="serverDrawerBadge" style="margin-left:auto;font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:20px;background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);">YouTube</span>
   </button>
-  <div class="drawer-sub" id="drawerServerSub">
-    <button class="drawer-sub-item" id="drawerSrvYT" onclick="drawerSetServer('youtube')" style="font-weight:600;">
-      <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:var(--accent);fill:none;stroke-width:2;flex-shrink:0;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      YouTube <span style="margin-left:4px;font-size:.7rem;opacity:.6;">(Default)</span>
-    </button>
-    <button class="drawer-sub-item" id="drawerSrvPixora" onclick="drawerSetServer('pixora')">
-      <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:var(--accent);fill:none;stroke-width:2;flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      Ad-Free (Pixora)
-    </button>
-  </div>
   <div class="drawer-divider"></div>
   <button class="drawer-item" onclick="closeMobileDrawer();openListPopup('history')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -2047,8 +1868,14 @@
       </div>
       <div class="video-container" id="interaction-zone" onclick="toggleControlsVisible()">
         <div id="youtube-engine"></div>
-        <!-- Ad-free player engine: youtube-nocookie iframe, fully controlled by our player -->
-        <div id="pixora-engine" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;"></div>
+        <!-- Pixora native video player — uses site's own controls -->
+        <div id="pixora-engine">
+          <video id="pixora-video" playsinline preload="auto"></video>
+        </div>
+        <!-- ChocolateMoo embed server -->
+        <div id="chocolatemoo-engine" style="display:none;position:absolute;inset:0;width:100%;height:100%;">
+          <iframe id="chocolatemoo-iframe" src="about:blank" allowfullscreen style="border:none;width:100%;height:100%;display:block;"></iframe>
+        </div>
         <div class="control-panel" id="hud">
           <div class="seekbar-box">
             <div class="time-display">
@@ -2076,21 +1903,6 @@
                 <svg class="cib-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 <span class="cib-val" id="quality-label">Auto</span>
               </button>
-            </div>
-
-            <!-- 3-dot server menu -->
-            <div onclick="event.stopPropagation()" style="margin-left:auto;">
-              <button class="ctrl-icon-btn" id="server-dots-btn"
-                onclick="toggleCtrlPanel('server-popup','server-dots-btn')"
-                onpointerdown="selectOpen=true;clearTimeout(hudTimer);showHud()"
-                title="Select player server"
-                style="flex-direction:column;gap:2px;">
-                <span style="display:block;width:3px;height:3px;border-radius:50%;background:currentColor;"></span>
-                <span style="display:block;width:3px;height:3px;border-radius:50%;background:currentColor;"></span>
-                <span style="display:block;width:3px;height:3px;border-radius:50%;background:currentColor;"></span>
-              </button>
-              <!-- hidden source-toggle-btn kept for JS compat -->
-              <button id="source-toggle-btn" style="display:none;"></button>
             </div>
 
             <button class="fs-btn" onclick="initFullscreen(event)" title="Fullscreen">
@@ -2131,21 +1943,6 @@
           <button class="q-pill" data-q="large"  onclick="setQuality('large',this)">480p</button>
           <button class="q-pill" data-q="medium" onclick="setQuality('medium',this)">360p</button>
           <button class="q-pill" data-q="small"  onclick="setQuality('small',this)">240p</button>
-        </div>
-      </div>
-      <!-- Server select popup (3-dot menu) -->
-      <div class="ctrl-popup" id="server-popup" onclick="event.stopPropagation()" style="width:220px;">
-        <div class="ctrl-popup-title">Player Server</div>
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          <button id="srvBtnYT" class="srv-option srv-active" onclick="playerSetServer('youtube',this)" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:color-mix(in srgb,var(--accent) 15%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--text-primary);font-size:.83rem;font-weight:700;cursor:pointer;font-family:var(--font-body);width:100%;text-align:left;">
-            <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--accent);fill:none;stroke-width:2.5;flex-shrink:0;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            YouTube
-            <span style="margin-left:auto;font-size:.65rem;opacity:.6;">Default</span>
-          </button>
-          <button id="srvBtnPixora" class="srv-option" onclick="playerSetServer('pixora',this)" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:transparent;border:1px solid var(--border);color:var(--text-secondary);font-size:.83rem;font-weight:600;cursor:pointer;font-family:var(--font-body);width:100%;text-align:left;">
-            <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            Ad-Free (Pixora)
-          </button>
         </div>
       </div>
 
@@ -2588,141 +2385,25 @@ function _freshIframe() {
   return el;
 }
 
-/* ── Built-in page content (avoids needing external files) ── */
-const _BUILT_IN_PAGES = {
-  'license.html': null,       // generated dynamically
-  'contributors.html': null   // generated dynamically
-};
-
-function _getLicenseHTML() {
-  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-custom').trim() || '#7c6af7';
-  return `<!DOCTYPE html><html lang="en" data-theme="${theme}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>License — Eduyomi</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
-<style>
-:root{--accent-custom:${accent};--accent:var(--accent-custom,#7c6af7);--font-display:'Syne',sans-serif;--font-body:'DM Sans',sans-serif;--radius-pill:999px;--transition:200ms cubic-bezier(.4,0,.2,1);}
-[data-theme="dark"]{--bg:#0d0e1a;--bg-nav:rgba(13,14,26,.92);--surface:rgba(255,255,255,.05);--border:rgba(255,255,255,.09);--text-primary:#eef0ff;--text-secondary:rgba(238,240,255,.6);--text-muted:rgba(238,240,255,.38);}
-[data-theme="amoled"]{--bg:#000;--bg-nav:rgba(0,0,0,.95);--surface:rgba(255,255,255,.04);--border:rgba(255,255,255,.07);--text-primary:#fff;--text-secondary:rgba(255,255,255,.55);--text-muted:rgba(255,255,255,.3);}
-[data-theme="light"]{--bg:#f5f4fb;--bg-nav:rgba(245,244,251,.92);--surface:rgba(0,0,0,.04);--border:rgba(0,0,0,.09);--text-primary:#13111f;--text-secondary:rgba(19,17,31,.6);--text-muted:rgba(19,17,31,.38);}
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}html{scroll-behavior:smooth;}
-body{font-family:var(--font-body);background:var(--bg);color:var(--text-primary);min-height:100vh;}
-nav{position:sticky;top:0;z-index:10;background:var(--bg-nav);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 20px;height:54px;}
-.back-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);cursor:pointer;}
-.back-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
-.nav-title{font-family:var(--font-display);font-size:.9rem;font-weight:700;background:linear-gradient(120deg,var(--accent),#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-.page{max-width:720px;margin:0 auto;padding:36px 20px 80px;}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:24px 26px;margin-bottom:18px;}
-.label{font-size:.62rem;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
-.dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
-h2{font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:var(--text-primary);margin-bottom:12px;}
-p{font-size:.88rem;line-height:1.75;color:var(--text-secondary);margin-bottom:10px;}
-p:last-child{margin-bottom:0;}
-.divider{height:1px;background:var(--border);margin:0 0 16px;}
-ul.clauses{list-style:none;display:flex;flex-direction:column;gap:14px;margin-top:4px;}
-ul.clauses li{display:flex;gap:12px;align-items:flex-start;}
-.num{flex-shrink:0;width:24px;height:24px;border-radius:7px;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent);font-size:.7rem;font-weight:800;display:flex;align-items:center;justify-content:center;}
-.clause-body{font-size:.87rem;line-height:1.7;color:var(--text-secondary);}strong{color:var(--text-primary);}
-.footer{margin-top:28px;padding:16px 20px;border-radius:12px;background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 18%,transparent);font-size:.78rem;color:var(--text-muted);text-align:center;line-height:1.65;}
-.hero{text-align:center;margin-bottom:40px;}
-.hero-icon{width:58px;height:58px;border-radius:16px;margin:0 auto 16px;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1.5px solid color-mix(in srgb,var(--accent) 28%,transparent);display:flex;align-items:center;justify-content:center;}
-.hero-icon svg{width:28px;height:28px;stroke:var(--accent);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
-h1{font-family:var(--font-display);font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,var(--text-primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px;}
-.sub{font-size:.86rem;color:var(--text-muted);}
-</style></head><body>
-<nav><button class="back-btn" onclick="window.parent.postMessage('popup:close','*')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
-<span class="nav-title">Eduyomi</span></nav>
-<main class="page">
-<div class="hero"><div class="hero-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
-<h1>License &amp; Disclaimer</h1><p class="sub">Please read carefully before using Eduyomi.</p></div>
-<div class="card"><div class="label"><span class="dot"></span>License</div><h2>Terms of Use</h2><div class="divider"></div><p>This project is provided for <strong>educational and informational purposes only</strong>. The source code is free to use, modify, and distribute provided proper credit is given to the original creator(s). Redistribution must not be used for commercial purposes without prior written permission.</p></div>
-<div class="card"><div class="label"><span class="dot"></span>Disclaimer</div><h2>Disclaimer of Content</h2><div class="divider"></div><p><strong>Eduyomi does not host, store, upload, or distribute any videos, media files, or educational content.</strong> All content referenced is sourced from third-party external services (including YouTube and other public platforms). Eduyomi acts solely as an interface.</p><p>All data displayed is provided through user-configured JSON files hosted on external repositories. Eduyomi has no control over the accuracy or legality of such data.</p></div>
-<div class="card"><div class="label"><span class="dot"></span>Liability</div><h2>Disclaimer of Liability</h2><div class="divider"></div><ul class="clauses">
-<li><span class="num">1</span><div class="clause-body"><strong>No Warranty</strong> — Provided "as is" without any warranties. No guarantee is made regarding accuracy, availability, or reliability.</div></li>
-<li><span class="num">2</span><div class="clause-body"><strong>User Responsibility</strong> — You are solely responsible for your own actions while using this platform. The creator(s) shall not be held liable for any damages.</div></li>
-<li><span class="num">3</span><div class="clause-body"><strong>Third-Party Content</strong> — Videos and resources accessed through this platform are governed by their respective platforms. Eduyomi assumes no responsibility.</div></li>
-<li><span class="num">4</span><div class="clause-body"><strong>External Repositories</strong> — Data loaded from GitHub or external sources is the responsibility of the person who configured it.</div></li>
-<li><span class="num">5</span><div class="clause-body"><strong>No Endorsement</strong> — Display of any content does not constitute endorsement by Eduyomi or its creator(s).</div></li>
-</ul></div>
-<div class="card"><div class="label"><span class="dot"></span>Copyright</div><h2>Copyright Notice</h2><div class="divider"></div><p>All trademarks and brand names referenced belong to their respective owners. Eduyomi makes no claim of ownership over any third-party intellectual property.</p></div>
-<div class="footer"><strong>This notice is subject to change without prior notice.</strong><br>Continued use constitutes acceptance of any updated terms.</div>
-</main></body></html>`;
-}
-
-function _getContributorsHTML() {
-  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-custom').trim() || '#7c6af7';
-  return `<!DOCTYPE html><html lang="en" data-theme="${theme}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Contributors — Eduyomi</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
-<style>
-:root{--accent-custom:${accent};--accent:var(--accent-custom,#7c6af7);--font-display:'Syne',sans-serif;--font-body:'DM Sans',sans-serif;--transition:200ms cubic-bezier(.4,0,.2,1);}
-[data-theme="dark"]{--bg:#0d0e1a;--bg-nav:rgba(13,14,26,.92);--surface:rgba(255,255,255,.05);--border:rgba(255,255,255,.09);--text-primary:#eef0ff;--text-secondary:rgba(238,240,255,.6);--text-muted:rgba(238,240,255,.38);}
-[data-theme="amoled"]{--bg:#000;--bg-nav:rgba(0,0,0,.95);--surface:rgba(255,255,255,.04);--border:rgba(255,255,255,.07);--text-primary:#fff;--text-secondary:rgba(255,255,255,.55);--text-muted:rgba(255,255,255,.3);}
-[data-theme="light"]{--bg:#f5f4fb;--bg-nav:rgba(245,244,251,.92);--surface:rgba(0,0,0,.04);--border:rgba(0,0,0,.09);--text-primary:#13111f;--text-secondary:rgba(19,17,31,.6);--text-muted:rgba(19,17,31,.38);}
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:var(--font-body);background:var(--bg);color:var(--text-primary);min-height:100vh;}
-nav{position:sticky;top:0;z-index:10;background:var(--bg-nav);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 20px;height:54px;}
-.back-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);cursor:pointer;}
-.back-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
-.nav-title{font-family:var(--font-display);font-size:.9rem;font-weight:700;background:linear-gradient(120deg,var(--accent),#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-.page{max-width:720px;margin:0 auto;padding:36px 20px 80px;}
-.hero{text-align:center;margin-bottom:40px;}
-.hero-icon{width:58px;height:58px;border-radius:16px;margin:0 auto 16px;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1.5px solid color-mix(in srgb,var(--accent) 28%,transparent);display:flex;align-items:center;justify-content:center;}
-.hero-icon svg{width:28px;height:28px;stroke:var(--accent);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
-h1{font-family:var(--font-display);font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,var(--text-primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px;}
-.sub{font-size:.86rem;color:var(--text-muted);}
-.section-title{font-family:var(--font-display);font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:18px;padding-bottom:10px;border-bottom:1px solid var(--border);}
-.contrib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:32px;}
-.contrib-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 16px;text-align:center;transition:border-color var(--transition),transform .2s;}
-.contrib-card:hover{border-color:color-mix(in srgb,var(--accent) 40%,transparent);transform:translateY(-2px);}
-.avatar{width:52px;height:52px;border-radius:50%;margin:0 auto 10px;background:color-mix(in srgb,var(--accent) 20%,transparent);border:2px solid color-mix(in srgb,var(--accent) 40%,transparent);display:flex;align-items:center;justify-content:center;font-size:1.4rem;}
-.contrib-name{font-weight:700;font-size:.9rem;color:var(--text-primary);margin-bottom:4px;}
-.contrib-role{font-size:.72rem;color:var(--accent);font-weight:600;}
-.note{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;text-align:center;font-size:.84rem;color:var(--text-secondary);line-height:1.7;margin-top:20px;}
-.gh-link{color:var(--accent);text-decoration:none;font-weight:600;}
-.gh-link:hover{text-decoration:underline;}
-</style></head><body>
-<nav><button class="back-btn" onclick="window.parent.postMessage('popup:close','*')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
-<span class="nav-title">Eduyomi</span></nav>
-<main class="page">
-<div class="hero"><div class="hero-icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
-<h1>Contributors</h1><p class="sub">People who make Eduyomi possible.</p></div>
-<div class="section-title">Core Team</div>
-<div class="contrib-grid">
-  <div class="contrib-card"><div class="avatar">👨‍💻</div><div class="contrib-name">RahulDasEmon</div><div class="contrib-role">Creator &amp; Lead Dev</div></div>
-</div>
-<div class="note">Want to contribute? Open a pull request or issue on <a class="gh-link" href="https://github.com/RahulDasEmon/rd-last-test" target="_blank">GitHub</a>.<br>Every contribution — big or small — is appreciated! ❤️</div>
-</main></body></html>`;
-}
-
 function openPopup(page) {
   if (_popupCloseTimer) { clearTimeout(_popupCloseTimer); _popupCloseTimer = null; }
 
   const o      = document.getElementById('popup-overlay');
   const loader = document.getElementById('popup-loader');
+
+  // Show spinner
   loader.classList.add('show');
 
+  // Always create a brand-new iframe — eliminates ALL caching/listener/blank-state issues
   const iframe = _freshIframe();
 
-  // Check if it's a built-in page — serve inline HTML
-  if (page === 'license.html' || page === 'contributors.html') {
-    const html = page === 'license.html' ? _getLicenseHTML() : _getContributorsHTML();
-    const blob = new Blob([html], { type: 'text/html' });
-    const blobUrl = URL.createObjectURL(blob);
-    iframe.addEventListener('load', function handler() {
-      iframe.removeEventListener('load', handler);
-      loader.classList.remove('show');
-      URL.revokeObjectURL(blobUrl);
-    });
-    iframe.src = blobUrl;
-  } else {
-    iframe.addEventListener('load', function handler() {
-      iframe.removeEventListener('load', handler);
-      loader.classList.remove('show');
-    });
-    iframe.src = page;
-  }
+  // Hide spinner exactly once when the new iframe finishes loading
+  iframe.addEventListener('load', function handler() {
+    iframe.removeEventListener('load', handler);
+    loader.classList.remove('show');
+  });
+
+  iframe.src = page;
 
   o.classList.add('active');
   document.body.style.overflow = 'hidden';
@@ -3424,14 +3105,8 @@ function onYouTubeIframeAPIReady() {
 function onPlayerReady() {
   playerReady = true;
   seekbar.addEventListener('input', () => {
-    if (_useInvidious) {
-      if (_pxPlayer && _pxReady) {
-        try { _pxPlayer.seekTo((_pxPlayer.getDuration()||0) * (seekbar.value / 100), true); } catch(e){}
-      }
-    } else {
-      if (!mainPlayer?.getDuration) return;
-      mainPlayer.seekTo(mainPlayer.getDuration() * (seekbar.value / 100));
-    }
+    if (!mainPlayer?.getDuration) return;
+    mainPlayer.seekTo(mainPlayer.getDuration() * (seekbar.value / 100));
     refreshHudInactivity();
   });
   attachGestureListeners();
@@ -3495,172 +3170,24 @@ async function playTopic(videoId, title) {
   }
 }
 
-/* ════════════════════════════════════════════════════════════════
-   AD-FREE PLAYER  —  Native youtube-nocookie iframe
-   Fully integrated with our own player controls:
-   seekbar, speed, quality, play/pause, fullscreen, watch-mark.
-════════════════════════════════════════════════════════════════ */
-
-let _useInvidious = false;   // renamed internally; true = ad-free mode
-let _pxPlayer     = null;    // YT.Player instance in ad-free mode
-let _pxReady      = false;
-let _pxPollTimer  = null;
-let _pxPendingSeek = null;
-
-/* ── Build youtube-nocookie embed URL ── */
-function _pxUrl(videoId) {
-  const qMap = { auto:'', hd1080:'1080p', hd720:'720p', large:'480p', medium:'360p', small:'240p' };
-  const q = qMap[settingsState.playerQuality || 'auto'] || '';
-  return videoId; // we use YT.Player API, URL built internally
-}
-
-/* ── Create a fresh YT.Player in the pixora-engine div ── */
-function _loadInvidious(videoId) {
-  const container = document.getElementById('pixora-engine');
-  container.innerHTML = '<div id="px-yt-player"></div>';
-  container.style.display = 'block';
-  document.getElementById('youtube-engine').style.display = 'none';
-  document.body.classList.add('pixora-mode');
-  _pxReady = false;
-  isVideoPlaying = true;
-  showHud();
-  syncSpeedSliderUI(parseFloat(settingsState.playerSpeed || '1'));
-  syncQualityPillUI(settingsState.playerQuality || 'auto');
-  document.getElementById('master-pp-btn').innerHTML = 'Ⅱ';
-  seekbar.style.opacity = '1';
-  seekbar.style.pointerEvents = 'auto';
-
-  if (_pxPlayer && typeof _pxPlayer.destroy === 'function') {
-    try { _pxPlayer.destroy(); } catch(e){}
-    _pxPlayer = null;
-  }
-
-  _pxPlayer = new YT.Player('px-yt-player', {
-    width: '100%',
-    height: '100%',
-    videoId: videoId,
-    host: 'https://www.youtube-nocookie.com',
-    playerVars: {
-      autoplay: 1,
-      rel: 0,
-      modestbranding: 1,
-      iv_load_policy: 3,
-      controls: 0,
-      disablekb: 1,
-      fs: 0,
-      playsinline: 1
-    },
-    events: {
-      onReady: function(e) {
-        _pxReady = true;
-        const rate = parseFloat(settingsState.playerSpeed || '1');
-        if (rate !== 1) e.target.setPlaybackRate(rate);
-        const q = settingsState.playerQuality || 'auto';
-        if (q !== 'auto') e.target.setPlaybackQuality(q);
-        if (_pxPendingSeek !== null) { e.target.seekTo(_pxPendingSeek, true); _pxPendingSeek = null; }
-        _startPxPoll();
-        refreshHudInactivity();
-      },
-      onStateChange: function(e) {
-        if (e.data === YT.PlayerState.PLAYING) {
-          isVideoPlaying = true;
-          document.getElementById('master-pp-btn').innerHTML = 'Ⅱ';
-          _startPxPoll();
-        } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
-          isVideoPlaying = false;
-          document.getElementById('master-pp-btn').innerHTML = '▶';
-          _stopPxPoll();
-          if (e.data === YT.PlayerState.ENDED && settingsState.autoPlayNext) {
-            playNextTopic && playNextTopic();
-          }
-        }
-      }
-    }
-  });
-
-  // Make the inner iframe fill the container
-  const style = document.createElement('style');
-  style.id = 'px-fill-style';
-  style.textContent = '#px-yt-player,#px-yt-player iframe{width:100%!important;height:100%!important;border:none!important;}';
-  if (!document.getElementById('px-fill-style')) document.head.appendChild(style);
-
-  _syncSourceUI();
-}
-
-function _unloadInvidious() {
-  _stopPxPoll();
-  if (_pxPlayer && typeof _pxPlayer.destroy === 'function') {
-    try { _pxPlayer.destroy(); } catch(e) {}
-    _pxPlayer = null;
-  }
-  _pxReady = false;
-  const container = document.getElementById('pixora-engine');
-  if (container) { container.innerHTML = ''; container.style.display = 'none'; }
-  document.getElementById('youtube-engine').style.display = '';
-  document.body.classList.remove('pixora-mode');
-  seekbar.style.opacity = '';
-  seekbar.style.pointerEvents = '';
-}
-
-function _startPxPoll() {
-  _stopPxPoll();
-  let watchMarked = watchedTopics.has(currentVideoId);
-  _pxPollTimer = setInterval(() => {
-    if (!_pxPlayer || !_pxReady || !isVideoPlaying) return;
-    try {
-      const cur = _pxPlayer.getCurrentTime() || 0;
-      const dur = _pxPlayer.getDuration() || 0;
-      if (!dur) return;
-      const pct = Math.min((cur / dur) * 100, 100);
-      seekbar.value = pct;
-      seekbar.style.background = `linear-gradient(to right, var(--accent) ${pct}%, rgba(255,255,255,0.15) ${pct}%)`;
-      curTimeEl.textContent = formatTime(cur);
-      durTimeEl.textContent = formatTime(dur);
-      if (!watchMarked && pct >= 75 && settingsState.autoMarkWatched) {
-        watchMarked = true; markVideoWatched(currentVideoId);
-      }
-    } catch(e){}
-  }, 400);
-}
-function _stopPxPoll() { clearInterval(_pxPollTimer); _pxPollTimer = null; }
-// Backward-compat aliases (used by togglePlayerSource / drawerSetServer calls)
-function _stopInvPoll() { _stopPxPoll(); }
-function _startInvPoll() { _startPxPoll(); }
-
-// Override startTimeTracker so it won't clash in pixora mode
-const _origStartTimeTracker = startTimeTracker;
-startTimeTracker = function() {
-  if (_useInvidious) return; // handled by _startPxPoll
-  _origStartTimeTracker();
-};
-
-// Patch seekbar to work with pixora player
-(function() {
-  const sb = document.getElementById('master-seekbar');
-  if (!sb) return;
-  sb.addEventListener('input', function() {
-    if (!_useInvidious || !_pxPlayer || !_pxReady) return;
-    try {
-      const dur = _pxPlayer.getDuration() || 0;
-      const t = (sb.value / 100) * dur;
-      _pxPlayer.seekTo(t, true);
-    } catch(e){}
-  });
-})();
-
 function doLoadVideo(videoId) {
   const savedQ    = settingsState.playerQuality || 'auto';
   const savedRate = parseFloat(settingsState.playerSpeed || '1');
 
-  if (_useInvidious) {
-    _loadInvidious(videoId);
+  if (activeVideoServer === 'pixora') {
+    _loadPixoraVideo(videoId, savedRate);
     return;
   }
 
-  // ── YouTube mode ──
-  _unloadInvidious();
+  if (activeVideoServer === 'chocolatemoo') {
+    _loadChocolateMooVideo(videoId);
+    return;
+  }
+
+  // ── YouTube (default) ──
+  _showYouTubeEngine();
   mainPlayer.loadVideoById({
-    videoId,
+    videoId: videoId,
     suggestedQuality: savedQ === 'auto' ? 'default' : savedQ
   });
   showHud();
@@ -3669,103 +3196,276 @@ function doLoadVideo(videoId) {
   syncQualityPillUI(savedQ);
 }
 
-/* ── Toggle Ad-free ↔ YouTube ── */
-function togglePlayerSource(e) {
-  e && e.stopPropagation();
-  _useInvidious = !_useInvidious;
-  settingsState.useInvidious = _useInvidious;
-  saveSettings();
+/* ════════════════════════════════════════
+   SERVER SELECTION + PIXORA NATIVE PLAYER
+════════════════════════════════════════ */
+let activeVideoServer = localStorage.getItem('eduyomi-server') || 'youtube';
+let _pxTrackerInterval = null;
 
-  if (!_useInvidious) {
-    _stopInvPoll();
-    _unloadInvidious();
-    _syncSourceUI();
-    if (currentVideoId && playerReady && mainPlayer?.loadVideoById) {
-      doLoadVideo(currentVideoId);
+// ── Show/hide engines ──────────────────
+function _showYouTubeEngine() {
+  document.getElementById('youtube-engine').style.display = '';
+  document.getElementById('pixora-engine').style.display  = 'none';
+  document.getElementById('chocolatemoo-engine').style.display = 'none';
+  // Always restore quality button for YouTube
+  const qBtn = document.getElementById('quality-toggle-btn');
+  if (qBtn) qBtn.style.display = '';
+  // Restore YouTube quality pills
+  _buildPxQualityPills();
+}
+function _showPixoraEngine() {
+  document.getElementById('youtube-engine').style.display = 'none';
+  document.getElementById('pixora-engine').style.display  = 'block';
+  document.getElementById('chocolatemoo-engine').style.display = 'none';
+  // Keep quality button visible — Pixora has its own quality options
+  const qBtn = document.getElementById('quality-toggle-btn');
+  if (qBtn) qBtn.style.display = '';
+}
+function _showChocolateMooEngine() {
+  document.getElementById('youtube-engine').style.display = 'none';
+  document.getElementById('pixora-engine').style.display  = 'none';
+  document.getElementById('chocolatemoo-engine').style.display = '';
+  // Hide quality button — not applicable for embed
+  const qBtn = document.getElementById('quality-toggle-btn');
+  if (qBtn) qBtn.style.display = 'none';
+}
+function _loadChocolateMooVideo(videoId) {
+  _showChocolateMooEngine();
+  const iframe = document.getElementById('chocolatemoo-iframe');
+  if (iframe) iframe.src = 'https://yt.chocolatemoo53.com/embed/' + videoId;
+  showHud();
+}
+
+// ── Fetch stream URL from Invidious API, then play natively ──
+// Cached streams for current pixora video — used by quality switcher
+let _pxStreams = [];
+
+async function _loadPixoraVideo(videoId, playbackRate, seekTo) {
+  _showPixoraEngine();
+  const vid = document.getElementById('pixora-video');
+  const btn = document.getElementById('master-pp-btn');
+  if (!vid) return;
+
+  // Reset state
+  vid.pause();
+  vid.src = '';
+  btn.innerHTML = '▶';
+  isVideoPlaying = false;
+  stopTimeTracker();
+  _clearPxTracker();
+  _pxStreams = [];
+
+  // Show controls with a loading indicator
+  curTimeEl.textContent = '…';
+  durTimeEl.textContent = '…';
+  seekbar.value = 0;
+  seekbar.style.background = `linear-gradient(to right, var(--accent) 0%, rgba(255,255,255,0.15) 0%)`;
+  showHud();
+
+  try {
+    const resp = await fetch(`https://inv.thepixora.com/api/v1/videos/${videoId}?fields=adaptiveFormats,formatStreams`);
+    if (!resp.ok) throw new Error('API ' + resp.status);
+    const data = await resp.json();
+
+    // formatStreams = combined video+audio, sorted best-first by Invidious
+    const streams = (data.formatStreams || []).filter(s => s.url);
+    if (!streams.length) throw new Error('No streams');
+
+    // Map Invidious quality labels → our pill keys
+    // qualityLabel examples: "1080p", "720p60", "480p", "360p", "144p"
+    const labelToKey = (lbl) => {
+      if (!lbl) return null;
+      const n = parseInt(lbl);
+      if (n >= 1080) return 'hd1080';
+      if (n >= 720)  return 'hd720';
+      if (n >= 480)  return 'large';
+      if (n >= 360)  return 'medium';
+      return 'small';
+    };
+
+    // Build deduped stream list keyed by quality pill key
+    const seen = new Set();
+    _pxStreams = [];
+    for (const s of streams) {
+      const key = labelToKey(s.qualityLabel);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      _pxStreams.push({ key, label: s.qualityLabel, url: s.url });
     }
-  } else {
-    if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
-    if (currentVideoId) _loadInvidious(currentVideoId);
-    else _syncSourceUI();
+
+    // Populate quality popup with real available qualities
+    _buildPxQualityPills();
+
+    // Pick stream matching saved quality pref, or best available
+    const savedQ = settingsState.playerQuality || 'auto';
+    let chosen = _pxStreams.find(s => s.key === savedQ) || _pxStreams[0];
+
+    // Update quality label
+    const ql = document.getElementById('quality-label');
+    if (ql) ql.textContent = chosen.label || chosen.key;
+    document.querySelectorAll('.q-pill').forEach(p => {
+      p.classList.toggle('active', p.dataset.q === chosen.key);
+    });
+
+    vid.src = chosen.url;
+    if (seekTo) vid.currentTime = seekTo;
+    vid.playbackRate = playbackRate || 1;
+    _attachPxControls(vid);
+    vid.play().catch(() => {});
+  } catch(err) {
+    console.warn('[Pixora] Stream fetch failed:', err);
+    curTimeEl.textContent = '!';
+    durTimeEl.textContent = 'Error';
+    toast.textContent = '⚠ Pixora stream unavailable';
+    toast.style.opacity = '1';
+    setTimeout(() => { toast.style.opacity = '0'; }, 3500);
   }
 }
 
-/* ── Update the source button UI ── */
-function _syncSourceUI() {
-  // Update hidden legacy btn (kept for compat)
-  const btn = document.getElementById('source-toggle-btn');
-  if (btn) {
-    btn.classList.remove('inv-active', 'inv-checking');
-    if (_useInvidious) btn.classList.add('inv-active');
-  }
-  // Update 3-dot server popup buttons
-  const ytBtn  = document.getElementById('srvBtnYT');
-  const pxBtn  = document.getElementById('srvBtnPixora');
-  const acStyle = 'background:color-mix(in srgb,var(--accent) 15%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--text-primary);font-weight:700;';
-  const inStyle = 'background:transparent;border:1px solid var(--border);color:var(--text-secondary);font-weight:600;';
-  if (ytBtn && pxBtn) {
-    if (_useInvidious) {
-      ytBtn.style.cssText  = ytBtn.style.cssText.replace(/background[^;]+;/g,'') + inStyle;
-      pxBtn.style.cssText  = pxBtn.style.cssText.replace(/background[^;]+;/g,'') + acStyle;
-    } else {
-      ytBtn.style.cssText  = ytBtn.style.cssText.replace(/background[^;]+;/g,'') + acStyle;
-      pxBtn.style.cssText  = pxBtn.style.cssText.replace(/background[^;]+;/g,'') + inStyle;
-    }
-  }
-  // Update drawer label
-  const dLabel = document.getElementById('drawerServerLabel');
-  if (dLabel) dLabel.textContent = _useInvidious ? 'Ad-Free' : 'YouTube';
-  // Highlight drawer server items
-  const dYT = document.getElementById('drawerSrvYT');
-  const dPX = document.getElementById('drawerSrvPixora');
-  if (dYT && dPX) {
-    dYT.style.color = _useInvidious ? '' : 'var(--accent)';
-    dPX.style.color = _useInvidious ? 'var(--accent)' : '';
-  }
-}
+// Build quality pills from available pixora streams
+function _buildPxQualityPills() {
+  const grid = document.querySelector('#quality-popup .q-pills-grid');
+  if (!grid) return;
 
-/* ── Server select helpers (3-dot popup + drawer) ── */
-function playerSetServer(server, clickedBtn) {
-  const wantPixora = (server === 'pixora');
-  if (wantPixora === _useInvidious) {
-    toggleCtrlPanel('server-popup','server-dots-btn'); // close
+  if (activeVideoServer !== 'pixora' || !_pxStreams.length) {
+    // Restore YouTube quality pills
+    grid.innerHTML = `
+      <button class="q-pill active" data-q="auto"   onclick="setQuality('auto',this)">Auto</button>
+      <button class="q-pill" data-q="hd1080" onclick="setQuality('hd1080',this)">1080p</button>
+      <button class="q-pill" data-q="hd720"  onclick="setQuality('hd720',this)">720p</button>
+      <button class="q-pill" data-q="large"  onclick="setQuality('large',this)">480p</button>
+      <button class="q-pill" data-q="medium" onclick="setQuality('medium',this)">360p</button>
+      <button class="q-pill" data-q="small"  onclick="setQuality('small',this)">240p</button>`;
     return;
   }
-  _useInvidious = wantPixora;
-  settingsState.useInvidious = _useInvidious;
-  saveSettings();
-  if (!_useInvidious) {
-    _stopInvPoll(); _unloadInvidious(); _syncSourceUI();
-    if (currentVideoId && playerReady && mainPlayer?.loadVideoById) doLoadVideo(currentVideoId);
-  } else {
-    if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
-    if (currentVideoId) _loadInvidious(currentVideoId); else _syncSourceUI();
-  }
-  toggleCtrlPanel('server-popup','server-dots-btn'); // close popup
-}
-function drawerSetServer(server) {
-  const wantPixora = (server === 'pixora');
-  if (wantPixora !== _useInvidious) {
-    _useInvidious = wantPixora;
-    settingsState.useInvidious = _useInvidious;
-    saveSettings();
-    if (!_useInvidious) {
-      _stopInvPoll(); _unloadInvidious(); _syncSourceUI();
-      if (currentVideoId && playerReady && mainPlayer?.loadVideoById) doLoadVideo(currentVideoId);
-    } else {
-      if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
-      if (currentVideoId) _loadInvidious(currentVideoId); else _syncSourceUI();
-    }
-  }
-  // visual feedback in drawer
-  _syncSourceUI();
+
+  // Pixora: show only available qualities
+  grid.innerHTML = _pxStreams.map(s =>
+    `<button class="q-pill" data-q="${s.key}" onclick="setQuality('${s.key}',this)">${s.label}</button>`
+  ).join('');
 }
 
-// Init from saved setting
-(function() {
-  _useInvidious = settingsState.useInvidious === true;
-  _syncSourceUI();
-})();
+// ── Wire native <video> element to site's existing controls ──
+function _attachPxControls(vid) {
+  // Remove old listeners by cloning (clean slate)
+  const freshVid = vid.cloneNode(true);
+  vid.parentNode.replaceChild(freshVid, vid);
+  const v = freshVid; // use fresh reference
+
+  const btn       = document.getElementById('master-pp-btn');
+  const pp_btn    = document.getElementById('master-pp-btn');
+
+  // Play/pause state sync
+  v.addEventListener('play', () => {
+    btn.innerHTML = 'Ⅱ';
+    isVideoPlaying = true;
+    refreshHudInactivity();
+    _startPxTracker(v);
+  });
+  v.addEventListener('pause', () => {
+    btn.innerHTML = '▶';
+    isVideoPlaying = false;
+    _clearPxTracker();
+    showHud();
+  });
+  v.addEventListener('ended', () => {
+    btn.innerHTML = '▶';
+    isVideoPlaying = false;
+    _clearPxTracker();
+    showHud();
+    markVideoWatched(currentVideoId);
+  });
+  v.addEventListener('waiting', () => { btn.innerHTML = '↻'; });
+  v.addEventListener('canplay', () => {
+    btn.innerHTML = isVideoPlaying ? 'Ⅱ' : '▶';
+    durTimeEl.textContent = formatTime(v.duration || 0);
+  });
+
+  // Override play/pause handler to control native video
+  window._pxVideoEl = v;
+
+  // Wire seekbar to native video
+  seekbar.oninput = () => {
+    if (!v.duration) return;
+    v.currentTime = v.duration * (seekbar.value / 100);
+    refreshHudInactivity();
+  };
+
+  // Speed slider wires through existing onSpeedSlider → setPlaybackRate calls
+  // We intercept setPlaybackRate style via overriding after attach
+}
+
+// ── Pixora seekbar/time tracker ────────────────────────────────
+function _startPxTracker(v) {
+  _clearPxTracker();
+  let watchMarked = watchedTopics.has(currentVideoId);
+  _pxTrackerInterval = setInterval(() => {
+    if (!v || !v.duration) return;
+    const cur = v.currentTime;
+    const dur = v.duration;
+    const p = (cur / dur) * 100;
+    seekbar.value = p;
+    seekbar.style.background = `linear-gradient(to right, var(--accent) ${p}%, rgba(255,255,255,0.15) ${p}%)`;
+    curTimeEl.textContent = formatTime(cur);
+    durTimeEl.textContent = formatTime(dur);
+    if (!watchMarked && dur > 0 && p >= 75 && settingsState.autoMarkWatched) {
+      watchMarked = true;
+      markVideoWatched(currentVideoId);
+    }
+  }, 400);
+}
+function _clearPxTracker() {
+  clearInterval(_pxTrackerInterval);
+  _pxTrackerInterval = null;
+}
+
+// ── Server sheet open/close/select ─────────────────────────────
+function openServerSheet() {
+  _syncServerSheet();
+  document.getElementById('serverSheetOverlay').classList.add('open');
+  document.getElementById('serverSheet').classList.add('open');
+}
+function closeServerSheet() {
+  document.getElementById('serverSheetOverlay').classList.remove('open');
+  document.getElementById('serverSheet').classList.remove('open');
+}
+function selectServer(server) {
+  activeVideoServer = server;
+  localStorage.setItem('eduyomi-server', server);
+  _syncServerSheet();
+  // Restore YouTube quality pills when switching back to YouTube
+  if (server === 'youtube') {
+    _pxStreams = [];
+    _buildPxQualityPills();
+    const qBtn = document.getElementById('quality-toggle-btn');
+    if (qBtn) qBtn.style.display = '';
+  }
+  // Clear pixora streams when switching away
+  if (server !== 'pixora') {
+    _pxStreams = [];
+  }
+  // Reload current video on new server if one is playing
+  if (currentVideoId) doLoadVideo(currentVideoId, currentVideoTitle);
+  setTimeout(closeServerSheet, 280);
+}
+function _syncServerSheet() {
+  const ytItem = document.getElementById('ss-youtube');
+  const pxItem = document.getElementById('ss-pixora');
+  const cmItem = document.getElementById('ss-chocolatemoo');
+  const badge  = document.getElementById('serverDrawerBadge');
+  if (ytItem) ytItem.classList.toggle('ss-active', activeVideoServer === 'youtube');
+  if (pxItem) pxItem.classList.toggle('ss-active', activeVideoServer === 'pixora');
+  if (cmItem) cmItem.classList.toggle('ss-active', activeVideoServer === 'chocolatemoo');
+  if (badge) {
+    badge.textContent = activeVideoServer === 'pixora' ? 'Pixora'
+      : activeVideoServer === 'chocolatemoo' ? 'ChocolateMoo'
+      : 'YouTube';
+  }
+}
+// Sync badge on DOM ready (handles page refresh with saved server)
+document.addEventListener('DOMContentLoaded', _syncServerSheet);
+// Also sync immediately (for scripts running after DOM)
+_syncServerSheet();
 
 /* ════════════════════════════════════════
    FULL-POWER AD BLOCKER
@@ -4321,14 +4021,16 @@ function openVideoOnYT(e) {
 
 function closePlayer() {
   videoSect.classList.remove('visible');
-  if (_useInvidious) {
-    _unloadInvidious();
-  } else {
-    if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
-  }
+  if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
+  // Reset pixora native video
+  const pxVid = document.getElementById('pixora-video') || window._pxVideoEl;
+  if (pxVid) { pxVid.pause(); pxVid.src = ''; }
+  _clearPxTracker();
+  window._pxVideoEl = null;
+  // Restore engines to default state
+  _showYouTubeEngine();
   isVideoPlaying = false;
   stopTimeTracker();
-  _stopInvPoll();
   document.querySelectorAll('.topic-item').forEach(el => el.classList.remove('playing'));
   currentVideoId = null;
 }
@@ -5018,36 +4720,31 @@ function toggleControlsVisible() {
 
 function handlePlayPause(e) {
   e.stopPropagation();
-  if (_useInvidious && _pxPlayer && _pxReady) {
-    if (isVideoPlaying) {
-      _pxPlayer.pauseVideo();
-    } else {
-      _pxPlayer.playVideo();
-    }
+  if (activeVideoServer === 'pixora') {
+    const v = window._pxVideoEl;
+    if (!v) return;
+    isVideoPlaying ? v.pause() : v.play();
     return;
   }
-  if (!_useInvidious) {
-    isVideoPlaying ? mainPlayer.pauseVideo() : mainPlayer.playVideo();
-  }
+  isVideoPlaying ? mainPlayer.pauseVideo() : mainPlayer.playVideo();
 }
-
 function stepBackward(e) {
   e.stopPropagation();
-  if (_useInvidious && _pxPlayer && _pxReady) {
-    try { _pxPlayer.seekTo((_pxPlayer.getCurrentTime()||0) - 10, true); } catch(err){}
-  } else if (!_useInvidious) {
-    mainPlayer?.seekTo(mainPlayer.getCurrentTime()-10);
+  if (activeVideoServer === 'pixora') {
+    const v = window._pxVideoEl;
+    if (v) v.currentTime = Math.max(0, v.currentTime - 10);
+    refreshHudInactivity(); return;
   }
-  refreshHudInactivity();
+  mainPlayer?.seekTo(mainPlayer.getCurrentTime()-10); refreshHudInactivity();
 }
 function stepForward(e) {
   e.stopPropagation();
-  if (_useInvidious && _pxPlayer && _pxReady) {
-    try { _pxPlayer.seekTo((_pxPlayer.getCurrentTime()||0) + 10, true); } catch(err){}
-  } else if (!_useInvidious) {
-    mainPlayer?.seekTo(mainPlayer.getCurrentTime()+10);
+  if (activeVideoServer === 'pixora') {
+    const v = window._pxVideoEl;
+    if (v) v.currentTime = Math.min(v.duration || 9999, v.currentTime + 10);
+    refreshHudInactivity(); return;
   }
-  refreshHudInactivity();
+  mainPlayer?.seekTo(mainPlayer.getCurrentTime()+10); refreshHudInactivity();
 }
 function toggleCtrlPanel(panelId, btnId) {
   const panel = document.getElementById(panelId);
@@ -5110,13 +4807,11 @@ function onSpeedSlider(el) {
   // Fill track
   const pct = ((el.value - 25) / (400 - 25)) * 100;
   el.style.background = `linear-gradient(to right, var(--accent) ${pct}%, rgba(255,255,255,0.18) ${pct}%)`;
-
-  if (_useInvidious && _pxPlayer && _pxReady) {
-    try { _pxPlayer.setPlaybackRate(rate); } catch(err) {}
-  } else if (!_useInvidious) {
+  if (activeVideoServer === 'pixora' && window._pxVideoEl) {
+    window._pxVideoEl.playbackRate = rate;
+  } else {
     mainPlayer?.setPlaybackRate(rate);
   }
-
   settingsState.playerSpeed = String(rate);
   saveSettings();
   // Sync presets highlight
@@ -5136,17 +4831,33 @@ function setQuality(q, btn) {
   document.querySelectorAll('.q-pill').forEach(p => p.classList.remove('active'));
   btn.classList.add('active');
   const labelMap = { auto:'Auto', hd1080:'1080p', hd720:'720p', large:'480p', medium:'360p', small:'240p' };
-  document.getElementById('quality-label').textContent = labelMap[q] || 'Auto';
+  document.getElementById('quality-label').textContent = btn.textContent || labelMap[q] || 'Auto';
   settingsState.playerQuality = q;
   saveSettings();
 
-  if (_useInvidious && _pxPlayer && _pxReady) {
-    try { _pxPlayer.setPlaybackQuality(q); } catch(err){}
+  if (activeVideoServer === 'pixora') {
+    // Switch native video to selected quality stream
+    const stream = _pxStreams.find(s => s.key === q) || _pxStreams[0];
+    if (!stream) { closeAllCtrlPanels(); return; }
+    const v = window._pxVideoEl;
+    if (!v) { closeAllCtrlPanels(); return; }
+    const currentTime = v.currentTime || 0;
+    const wasPlaying  = isVideoPlaying;
+    const rate = v.playbackRate || 1;
+    v.pause();
+    v.src = stream.url;
+    v.playbackRate = rate;
+    v.addEventListener('loadedmetadata', () => {
+      v.currentTime = currentTime;
+      if (wasPlaying) v.play().catch(() => {});
+    }, { once: true });
+    document.getElementById('quality-label').textContent = stream.label || btn.textContent;
     closeAllCtrlPanels();
     return;
   }
 
-  if (!mainPlayer || !currentVideoId) return;
+  // YouTube
+  if (!mainPlayer || !currentVideoId) { closeAllCtrlPanels(); return; }
   const currentTime = mainPlayer.getCurrentTime() || 0;
   const wasPlaying  = isVideoPlaying;
   mainPlayer.loadVideoById({
@@ -5190,6 +4901,10 @@ function initFullscreen(e) {
   if (!document.fullscreenElement) {
     card.requestFullscreen().catch(()=>{});
     if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(()=>{});
+    // For native video, also request fullscreen on video element if needed
+    if (activeVideoServer === 'pixora' && window._pxVideoEl && window._pxVideoEl.requestFullscreen) {
+      window._pxVideoEl.requestFullscreen().catch(()=>{});
+    }
   } else {
     document.exitFullscreen().catch(()=>{});
   }
@@ -5348,6 +5063,48 @@ applySettingsUI();
 // Re-run after DOM is fully painted so modal elements (settings-row-automarkwatched etc.) exist
 setTimeout(applySettingsUI, 0);
 </script>
+<!-- SERVER SELECTION SHEET -->
+<div id="serverSheetOverlay" onclick="closeServerSheet()"></div>
+<div id="serverSheet">
+  <div class="ss-handle"></div>
+  <div class="ss-header">
+    Video Server
+    <div class="ss-sub">Choose where videos stream from</div>
+  </div>
+  <div class="ss-list">
+    <div class="ss-item ss-active" id="ss-youtube" onclick="selectServer('youtube')">
+      <div class="ss-item-icon">
+        <svg viewBox="0 0 24 24"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" stroke-width="1.5"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" style="fill:var(--bg-nav,#1a1a2e)"/></svg>
+      </div>
+      <div class="ss-item-info">
+        <div class="ss-item-name">YouTube</div>
+        <div class="ss-item-desc">Default · Full controls &amp; quality options</div>
+      </div>
+      <div class="ss-check"><svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg></div>
+    </div>
+    <div class="ss-item" id="ss-pixora" onclick="selectServer('pixora')">
+      <div class="ss-item-icon">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="1.5"/><polygon points="10,8 17,12 10,16" style="fill:currentColor;stroke:none"/></svg>
+      </div>
+      <div class="ss-item-info">
+        <div class="ss-item-name">Pixora Server</div>
+        <div class="ss-item-desc">inv.thepixora.com · Ad-free alternative stream</div>
+      </div>
+      <div class="ss-check"><svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg></div>
+    </div>
+    <div class="ss-item" id="ss-chocolatemoo" onclick="selectServer('chocolatemoo')">
+      <div class="ss-item-icon">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" stroke-width="1.5"/><polygon points="10,8 17,12 10,16" style="fill:currentColor;stroke:none"/></svg>
+      </div>
+      <div class="ss-item-info">
+        <div class="ss-item-name">ChocolateMoo Server</div>
+        <div class="ss-item-desc">yt.chocolatemoo53.com · Alternative embed stream</div>
+      </div>
+      <div class="ss-check"><svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg></div>
+    </div>
+  </div>
+</div>
+
 <!-- FILTER PANEL -->
 <div id="filterPanelOverlay" onclick="closeFilterPanel()"></div>
 <div id="filterPanel">

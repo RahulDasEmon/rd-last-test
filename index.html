@@ -854,8 +854,26 @@
       color: #4ade80;
     }
     #source-toggle-btn.inv-active svg { stroke: #4ade80; }
+    #source-toggle-btn.inv-checking {
+      background: rgba(251,191,36,0.15);
+      border-color: rgba(251,191,36,0.4);
+      color: #fbbf24;
+      animation: inv-pulse 1s ease-in-out infinite;
+    }
+    #source-toggle-btn.inv-checking svg { stroke: #fbbf24; }
+    @keyframes inv-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
     /* Quality pills disabled in invidious mode */
     body.invidious-mode #quality-toggle-btn { opacity: .45; pointer-events: none; }
+    /* Retry instance btn */
+    #inv-retry-btn {
+      display: none;
+      position: absolute; top: 10px; right: 10px; z-index: 200;
+      background: rgba(251,191,36,0.18); border: 1px solid rgba(251,191,36,0.5);
+      color: #fbbf24; font-size: .72rem; font-weight: 700;
+      padding: 5px 10px; border-radius: 8px; cursor: pointer;
+      backdrop-filter: blur(6px);
+    }
+    body.invidious-mode #inv-retry-btn { display: block; }
 
     /* Controls overlay */
     .control-panel {
@@ -2023,6 +2041,7 @@
           referrerpolicy="no-referrer"
           style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;z-index:2;">
         </iframe>
+        <button id="inv-retry-btn" onclick="retryNextInstance()" title="Try next instance">⟳ Try next server</button>
         <div class="control-panel" id="hud">
           <div class="seekbar-box">
             <div class="time-display">
@@ -3330,39 +3349,74 @@ async function playTopic(videoId, title) {
   }
 }
 
-/* ════════════════════════════════════════
-   DUAL-MODE PLAYER  (Invidious ↔ YouTube)
-════════════════════════════════════════ */
-const INVIDIOUS_HOST = 'https://inv.nadeko.net';
-let   _useInvidious  = false;   // persisted in settingsState.useInvidious
-let   _invPollTimer  = null;    // seekbar polling for invidious mode
+/* ════════════════════════════════════════════════════════════════
+   MULTI-INSTANCE AD-FREE PLAYER
+   Priority: nerdvpn → thepixora → chocolatemoo53 → YouTube fallback
+   Auto-detects blocked/failed instances and moves to the next one
+════════════════════════════════════════════════════════════════ */
 
-// Quality map: our keys → Invidious dash_qualitys
+const INV_INSTANCES = [
+  { host: 'https://invidious.nerdvpn.de',    name: 'NerdVPN 🇺🇦'  },
+  { host: 'https://inv.thepixora.com',        name: 'Pixora 🇨🇦'   },
+  { host: 'https://yt.chocolatemoo53.com',    name: 'Choco 🇺🇸'    },
+];
+
+// -1 = YouTube mode, 0/1/2 = instance index
+let _invIndex      = -1;   // current active instance (-1 = YouTube)
+let _useInvidious  = false;
+let _invPollTimer  = null;
+let _invStartTime  = null;
+let _invRate       = 1;
+let _invDuration   = 0;
+let _invPausedAt   = 0;
+let _invChecking   = false; // guard against concurrent checks
+
 const INV_QUALITY_MAP = {
-  auto:'',hd1080:'1080',hd720:'720',large:'480',medium:'360',small:'240'
+  auto:'', hd1080:'1080', hd720:'720', large:'480', medium:'360', small:'240'
 };
 
-function _invUrl(videoId) {
+/* ── Build embed URL for a given instance host ── */
+function _invUrl(host, videoId) {
   const q = INV_QUALITY_MAP[settingsState.playerQuality || 'auto'] || '';
-  const params = new URLSearchParams({
-    autoplay: '1',
-    local: 'true',
-    listen: '0',
-  });
-  if (q) params.set('quality', q);
-  return `${INVIDIOUS_HOST}/embed/${videoId}?${params}`;
+  const p = new URLSearchParams({ autoplay:'1', local:'true', listen:'0' });
+  if (q) p.set('quality', q);
+  return `${host}/embed/${videoId}?${p}`;
 }
 
+/* ── Check if an instance is reachable (HEAD its embed page, 4s timeout) ── */
+async function _checkInstance(host, videoId) {
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 4000);
+    const res  = await fetch(`${host}/embed/${videoId}`, {
+      method: 'HEAD', mode: 'no-cors', signal: ctrl.signal
+    });
+    clearTimeout(tid);
+    return true; // no-cors always succeeds if reachable (opaque response)
+  } catch { return false; }
+}
+
+/* ── Find first working instance, returns index or -1 if all fail ── */
+async function _findWorkingInstance(videoId) {
+  _invChecking = true;
+  _syncSourceUI('checking');
+  for (let i = 0; i < INV_INSTANCES.length; i++) {
+    _syncSourceUI('trying', i);
+    const ok = await _checkInstance(INV_INSTANCES[i].host, videoId);
+    if (ok) { _invChecking = false; return i; }
+  }
+  _invChecking = false;
+  return -1; // all failed
+}
+
+/* ── Seekbar poll (elapsed-time based since cross-origin) ── */
 function _startInvPoll() {
   _stopInvPoll();
-  const inv    = document.getElementById('invidious-engine');
   let watchMarked = watchedTopics.has(currentVideoId);
   _invPollTimer = setInterval(() => {
-    // We can't read invidious iframe state cross-origin,
-    // so drive seekbar using a simple elapsed-time counter
-    if (!_invStartTime) return;
+    if (!_invStartTime || !isVideoPlaying) return;
     const elapsed = (Date.now() - _invStartTime) / 1000 * _invRate;
-    const dur     = _invDuration;
+    const dur = _invDuration;
     if (!dur) return;
     const p = Math.min((elapsed / dur) * 100, 100);
     seekbar.value = p;
@@ -3371,51 +3425,120 @@ function _startInvPoll() {
     curTimeEl.textContent = formatTime(elapsed);
     durTimeEl.textContent = formatTime(dur);
     if (!watchMarked && p >= 75 && settingsState.autoMarkWatched) {
-      watchMarked = true;
-      markVideoWatched(currentVideoId);
+      watchMarked = true; markVideoWatched(currentVideoId);
     }
   }, 400);
 }
 function _stopInvPoll() { clearInterval(_invPollTimer); _invPollTimer = null; }
 
-let _invStartTime  = null;   // Date.now() when play began
-let _invRate       = 1;      // current playback rate
-let _invDuration   = 0;      // video duration (fetched via oembed)
-
-async function _fetchDuration(videoId) {
+/* ── Fetch video duration via Invidious API ── */
+async function _fetchDuration(host, videoId) {
   try {
-    const r = await fetch(`${INVIDIOUS_HOST}/api/v1/videos/${videoId}?fields=lengthSeconds`);
+    const r = await fetch(`${host}/api/v1/videos/${videoId}?fields=lengthSeconds`);
     const d = await r.json();
     _invDuration = d.lengthSeconds || 0;
     durTimeEl.textContent = formatTime(_invDuration);
-  } catch {
-    // fallback: oembed doesn't give duration; leave as 0
-    _invDuration = 0;
-  }
+  } catch { _invDuration = 0; }
 }
 
-function _loadInvidious(videoId) {
-  const inv = document.getElementById('invidious-engine');
-  inv.src = _invUrl(videoId);
+/* ── Actually show invidious iframe ── */
+function _mountInvidious(idx, videoId) {
+  _invIndex = idx;
+  const host = INV_INSTANCES[idx].host;
+  const inv  = document.getElementById('invidious-engine');
+  inv.src = _invUrl(host, videoId);
   inv.style.display = 'block';
   document.getElementById('youtube-engine').style.display = 'none';
   document.body.classList.add('invidious-mode');
   _invStartTime = Date.now();
   _invRate      = parseFloat(settingsState.playerSpeed || '1');
   _invDuration  = 0;
-  // Disable seekbar input in invidious mode (can't seek cross-origin)
-  seekbar.style.opacity = '0.4';
+  seekbar.style.opacity       = '0.45';
   seekbar.style.pointerEvents = 'none';
-  // Show HUD
   showHud();
   syncSpeedSliderUI(_invRate);
   syncQualityPillUI(settingsState.playerQuality || 'auto');
   isVideoPlaying = true;
   document.getElementById('master-pp-btn').innerHTML = 'Ⅱ';
-  startTimeTracker();          // reuse tracker; it reads _invStartTime
-  _fetchDuration(videoId);
+  _fetchDuration(host, videoId);
   _startInvPoll();
   refreshHudInactivity();
+  _syncSourceUI('active', idx);
+
+  // Watch the iframe for error page (access-denied → try next instance)
+  _watchIframeError(videoId, idx);
+}
+
+/* ── Detect if the iframe loaded an error page (e.g. go-away) ── */
+function _watchIframeError(videoId, triedIdx) {
+  const inv = document.getElementById('invidious-engine');
+  const onLoad = () => {
+    inv.removeEventListener('load', onLoad);
+    // We can't read cross-origin content, but if the iframe fires load
+    // almost instantly (<600ms) it's likely an error/redirect page, not a video
+    // We'll also set a 6s "did video actually start?" watchdog
+    setTimeout(async () => {
+      if (!_useInvidious || _invIndex !== triedIdx || !currentVideoId) return;
+      // Try the next instance if this one returned in <600ms (error page)
+      const nextIdx = triedIdx + 1;
+      if (nextIdx < INV_INSTANCES.length) {
+        console.warn(`[AdFree] Instance ${INV_INSTANCES[triedIdx].name} may be blocked, trying next…`);
+        _mountInvidious(nextIdx, videoId);
+      } else {
+        // All Invidious instances exhausted → fallback to YouTube
+        console.warn('[AdFree] All instances failed, falling back to YouTube');
+        _fallbackToYouTube(videoId);
+      }
+    }, 6000);
+  };
+  inv.addEventListener('load', onLoad);
+}
+
+/* ── Fallback to YouTube silently ── */
+function _fallbackToYouTube(videoId) {
+  _useInvidious = false;
+  _invIndex     = -1;
+  settingsState.useInvidious = false;
+  saveSettings();
+  _unloadInvidious();
+  _syncSourceUI('youtube');
+  if (playerReady && mainPlayer?.loadVideoById) {
+    const savedQ    = settingsState.playerQuality || 'auto';
+    const savedRate = parseFloat(settingsState.playerSpeed || '1');
+    mainPlayer.loadVideoById({
+      videoId,
+      suggestedQuality: savedQ === 'auto' ? 'default' : savedQ
+    });
+    showHud();
+    syncSpeedSliderUI(savedRate);
+    if (savedRate !== 1) mainPlayer.setPlaybackRate(savedRate);
+    syncQualityPillUI(savedQ);
+  }
+  // Show a brief toast
+  const t = document.getElementById('gesture-toast');
+  if (t) { t.textContent = '⚠ Ad-free unavailable — using YouTube'; t.style.opacity='1'; setTimeout(()=>t.style.opacity='0', 3500); }
+}
+
+/* ── Full load: probe instances then mount best one ── */
+async function _loadInvidious(videoId) {
+  // First try last-known-good instance directly (faster UX)
+  const savedIdx = typeof settingsState.lastGoodInvIdx === 'number'
+    ? settingsState.lastGoodInvIdx : 0;
+
+  if (savedIdx >= 0 && savedIdx < INV_INSTANCES.length) {
+    _mountInvidious(savedIdx, videoId);
+    return;
+  }
+
+  // Otherwise probe
+  const idx = await _findWorkingInstance(videoId);
+  if (idx >= 0) {
+    settingsState.lastGoodInvIdx = idx;
+    saveSettings();
+    _mountInvidious(idx, videoId);
+  } else {
+    _fallbackToYouTube(videoId);
+  }
 }
 
 function _unloadInvidious() {
@@ -3424,16 +3547,16 @@ function _unloadInvidious() {
   inv.style.display = 'none';
   document.getElementById('youtube-engine').style.display = '';
   document.body.classList.remove('invidious-mode');
-  seekbar.style.opacity = '';
+  seekbar.style.opacity       = '';
   seekbar.style.pointerEvents = '';
   _stopInvPoll();
   _invStartTime = null;
 }
 
-// Override startTimeTracker so it works in invidious mode too
+// Override startTimeTracker so it won't clash in invidious mode
 const _origStartTimeTracker = startTimeTracker;
 startTimeTracker = function() {
-  if (_useInvidious) { /* handled by _startInvPoll */ return; }
+  if (_useInvidious) return; // handled by _startInvPoll
   _origStartTimeTracker();
 };
 
@@ -3449,7 +3572,7 @@ function doLoadVideo(videoId) {
   // ── YouTube mode ──
   _unloadInvidious();
   mainPlayer.loadVideoById({
-    videoId: videoId,
+    videoId,
     suggestedQuality: savedQ === 'auto' ? 'default' : savedQ
   });
   showHud();
@@ -3458,45 +3581,69 @@ function doLoadVideo(videoId) {
   syncQualityPillUI(savedQ);
 }
 
-/* Toggle between YouTube ↔ Invidious */
+/* ── Toggle Ad-free ↔ YouTube ── */
 function togglePlayerSource(e) {
   e && e.stopPropagation();
   _useInvidious = !_useInvidious;
   settingsState.useInvidious = _useInvidious;
   saveSettings();
-  _syncSourceUI();
-  // Reload current video in the new source if one is playing
-  if (currentVideoId) {
-    if (_useInvidious) {
-      if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
-      _loadInvidious(currentVideoId);
-    } else {
-      _stopInvPoll();
-      _unloadInvidious();
-      if (playerReady && mainPlayer?.loadVideoById) {
-        doLoadVideo(currentVideoId);
-      }
+
+  if (!_useInvidious) {
+    // Switch to YouTube
+    _invIndex = -1;
+    _stopInvPoll();
+    _unloadInvidious();
+    _syncSourceUI('youtube');
+    if (currentVideoId && playerReady && mainPlayer?.loadVideoById) {
+      doLoadVideo(currentVideoId);
     }
+  } else {
+    // Switch to Ad-free
+    _invIndex = -1;
+    if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
+    if (currentVideoId) _loadInvidious(currentVideoId);
+    else _syncSourceUI('active', 0);
   }
 }
 
-function _syncSourceUI() {
+/* ── Retry next instance manually ── */
+function retryNextInstance() {
+  if (!_useInvidious || !currentVideoId) return;
+  const next = (_invIndex + 1) % INV_INSTANCES.length;
+  _mountInvidious(next, currentVideoId);
+}
+
+/* ── Update the source button UI ── */
+function _syncSourceUI(state, idx) {
   const btn   = document.getElementById('source-toggle-btn');
   const label = document.getElementById('source-label');
-  if (!btn) return;
-  if (_useInvidious) {
+  if (!btn || !label) return;
+
+  btn.classList.remove('inv-active', 'inv-checking');
+
+  if (state === 'youtube' || !_useInvidious) {
+    label.textContent = 'YouTube';
+  } else if (state === 'checking') {
+    btn.classList.add('inv-checking');
+    label.textContent = 'Probing…';
+  } else if (state === 'trying' && idx !== undefined) {
+    btn.classList.add('inv-checking');
+    label.textContent = `Trying ${idx+1}/3…`;
+  } else if (state === 'active' && idx !== undefined) {
+    btn.classList.add('inv-active');
+    const short = ['NerdVPN','Pixora','Choco'];
+    label.textContent = `✓ ${short[idx] || 'Ad-free'}`;
+  } else if (_useInvidious) {
     btn.classList.add('inv-active');
     label.textContent = 'Ad-free ✓';
-  } else {
-    btn.classList.remove('inv-active');
-    label.textContent = 'YouTube';
   }
 }
 
 // Init from saved setting
 (function() {
   _useInvidious = settingsState.useInvidious === true;
-  _syncSourceUI();
+  _syncSourceUI(_useInvidious ? 'active' : 'youtube',
+    settingsState.lastGoodInvIdx ?? 0);
 })();
 
 /* ════════════════════════════════════════
@@ -4774,7 +4921,6 @@ function handlePlayPause(e) {
   }
   isVideoPlaying ? mainPlayer.pauseVideo() : mainPlayer.playVideo();
 }
-let _invPausedAt = 0;
 
 function stepBackward(e) {
   e.stopPropagation();

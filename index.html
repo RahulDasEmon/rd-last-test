@@ -849,10 +849,10 @@
       transform: scale(1.08);
       transform-origin: center center;
     }
-    /* Invidious mode: allow pointer events on the iframe itself (it has its own controls as fallback) */
-    body.invidious-mode #invidious-engine { pointer-events: auto; }
-    body.invidious-mode #youtube-engine   { display: none !important; }
-    body.invidious-mode #interaction-zone { cursor: default; }
+    /* Ad-free (Pixora) mode — our native engine takes over */
+    body.pixora-mode #pixora-engine  { pointer-events: none; }
+    body.pixora-mode #youtube-engine { display: none !important; }
+    body.pixora-mode #interaction-zone { cursor: pointer; }
     /* Source toggle active state */
     #source-toggle-btn.inv-active {
       background: rgba(74,222,128,0.15);
@@ -868,18 +868,8 @@
     }
     #source-toggle-btn.inv-checking svg { stroke: #fbbf24; }
     @keyframes inv-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
-    /* Quality pills disabled in invidious mode */
-    body.invidious-mode #quality-toggle-btn { opacity: .45; pointer-events: none; }
-    /* Retry instance btn */
-    #inv-retry-btn {
-      display: none;
-      position: absolute; top: 10px; right: 10px; z-index: 200;
-      background: rgba(251,191,36,0.18); border: 1px solid rgba(251,191,36,0.5);
-      color: #fbbf24; font-size: .72rem; font-weight: 700;
-      padding: 5px 10px; border-radius: 8px; cursor: pointer;
-      backdrop-filter: blur(6px);
-    }
-    body.invidious-mode #inv-retry-btn { display: block; }
+    /* Quality pills available in pixora mode (we control the iframe) */
+    body.pixora-mode #quality-toggle-btn { opacity: 1; pointer-events: auto; }
 
     /* Controls overlay */
     .control-panel {
@@ -2057,14 +2047,8 @@
       </div>
       <div class="video-container" id="interaction-zone" onclick="toggleControlsVisible()">
         <div id="youtube-engine"></div>
-        <iframe id="invidious-engine"
-          src="about:blank"
-          allow="autoplay; fullscreen"
-          allowfullscreen
-          referrerpolicy="no-referrer"
-          style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;z-index:2;">
-        </iframe>
-        <button id="inv-retry-btn" style="display:none"></button>
+        <!-- Ad-free player engine: youtube-nocookie iframe, fully controlled by our player -->
+        <div id="pixora-engine" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;"></div>
         <div class="control-panel" id="hud">
           <div class="seekbar-box">
             <div class="time-display">
@@ -2150,7 +2134,7 @@
         </div>
       </div>
       <!-- Server select popup (3-dot menu) -->
-      <div class="ctrl-popup" id="server-popup" onclick="event.stopPropagation()" style="width:220px;right:10px;left:auto;bottom:70px;">
+      <div class="ctrl-popup" id="server-popup" onclick="event.stopPropagation()" style="width:220px;">
         <div class="ctrl-popup-title">Player Server</div>
         <div style="display:flex;flex-direction:column;gap:6px;">
           <button id="srvBtnYT" class="srv-option srv-active" onclick="playerSetServer('youtube',this)" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:color-mix(in srgb,var(--accent) 15%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--text-primary);font-size:.83rem;font-weight:700;cursor:pointer;font-family:var(--font-body);width:100%;text-align:left;">
@@ -2604,25 +2588,141 @@ function _freshIframe() {
   return el;
 }
 
+/* ── Built-in page content (avoids needing external files) ── */
+const _BUILT_IN_PAGES = {
+  'license.html': null,       // generated dynamically
+  'contributors.html': null   // generated dynamically
+};
+
+function _getLicenseHTML() {
+  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-custom').trim() || '#7c6af7';
+  return `<!DOCTYPE html><html lang="en" data-theme="${theme}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>License — Eduyomi</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--accent-custom:${accent};--accent:var(--accent-custom,#7c6af7);--font-display:'Syne',sans-serif;--font-body:'DM Sans',sans-serif;--radius-pill:999px;--transition:200ms cubic-bezier(.4,0,.2,1);}
+[data-theme="dark"]{--bg:#0d0e1a;--bg-nav:rgba(13,14,26,.92);--surface:rgba(255,255,255,.05);--border:rgba(255,255,255,.09);--text-primary:#eef0ff;--text-secondary:rgba(238,240,255,.6);--text-muted:rgba(238,240,255,.38);}
+[data-theme="amoled"]{--bg:#000;--bg-nav:rgba(0,0,0,.95);--surface:rgba(255,255,255,.04);--border:rgba(255,255,255,.07);--text-primary:#fff;--text-secondary:rgba(255,255,255,.55);--text-muted:rgba(255,255,255,.3);}
+[data-theme="light"]{--bg:#f5f4fb;--bg-nav:rgba(245,244,251,.92);--surface:rgba(0,0,0,.04);--border:rgba(0,0,0,.09);--text-primary:#13111f;--text-secondary:rgba(19,17,31,.6);--text-muted:rgba(19,17,31,.38);}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}html{scroll-behavior:smooth;}
+body{font-family:var(--font-body);background:var(--bg);color:var(--text-primary);min-height:100vh;}
+nav{position:sticky;top:0;z-index:10;background:var(--bg-nav);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 20px;height:54px;}
+.back-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);cursor:pointer;}
+.back-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+.nav-title{font-family:var(--font-display);font-size:.9rem;font-weight:700;background:linear-gradient(120deg,var(--accent),#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.page{max-width:720px;margin:0 auto;padding:36px 20px 80px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:24px 26px;margin-bottom:18px;}
+.label{font-size:.62rem;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+h2{font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:var(--text-primary);margin-bottom:12px;}
+p{font-size:.88rem;line-height:1.75;color:var(--text-secondary);margin-bottom:10px;}
+p:last-child{margin-bottom:0;}
+.divider{height:1px;background:var(--border);margin:0 0 16px;}
+ul.clauses{list-style:none;display:flex;flex-direction:column;gap:14px;margin-top:4px;}
+ul.clauses li{display:flex;gap:12px;align-items:flex-start;}
+.num{flex-shrink:0;width:24px;height:24px;border-radius:7px;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent);font-size:.7rem;font-weight:800;display:flex;align-items:center;justify-content:center;}
+.clause-body{font-size:.87rem;line-height:1.7;color:var(--text-secondary);}strong{color:var(--text-primary);}
+.footer{margin-top:28px;padding:16px 20px;border-radius:12px;background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 18%,transparent);font-size:.78rem;color:var(--text-muted);text-align:center;line-height:1.65;}
+.hero{text-align:center;margin-bottom:40px;}
+.hero-icon{width:58px;height:58px;border-radius:16px;margin:0 auto 16px;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1.5px solid color-mix(in srgb,var(--accent) 28%,transparent);display:flex;align-items:center;justify-content:center;}
+.hero-icon svg{width:28px;height:28px;stroke:var(--accent);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+h1{font-family:var(--font-display);font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,var(--text-primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px;}
+.sub{font-size:.86rem;color:var(--text-muted);}
+</style></head><body>
+<nav><button class="back-btn" onclick="window.parent.postMessage('popup:close','*')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+<span class="nav-title">Eduyomi</span></nav>
+<main class="page">
+<div class="hero"><div class="hero-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+<h1>License &amp; Disclaimer</h1><p class="sub">Please read carefully before using Eduyomi.</p></div>
+<div class="card"><div class="label"><span class="dot"></span>License</div><h2>Terms of Use</h2><div class="divider"></div><p>This project is provided for <strong>educational and informational purposes only</strong>. The source code is free to use, modify, and distribute provided proper credit is given to the original creator(s). Redistribution must not be used for commercial purposes without prior written permission.</p></div>
+<div class="card"><div class="label"><span class="dot"></span>Disclaimer</div><h2>Disclaimer of Content</h2><div class="divider"></div><p><strong>Eduyomi does not host, store, upload, or distribute any videos, media files, or educational content.</strong> All content referenced is sourced from third-party external services (including YouTube and other public platforms). Eduyomi acts solely as an interface.</p><p>All data displayed is provided through user-configured JSON files hosted on external repositories. Eduyomi has no control over the accuracy or legality of such data.</p></div>
+<div class="card"><div class="label"><span class="dot"></span>Liability</div><h2>Disclaimer of Liability</h2><div class="divider"></div><ul class="clauses">
+<li><span class="num">1</span><div class="clause-body"><strong>No Warranty</strong> — Provided "as is" without any warranties. No guarantee is made regarding accuracy, availability, or reliability.</div></li>
+<li><span class="num">2</span><div class="clause-body"><strong>User Responsibility</strong> — You are solely responsible for your own actions while using this platform. The creator(s) shall not be held liable for any damages.</div></li>
+<li><span class="num">3</span><div class="clause-body"><strong>Third-Party Content</strong> — Videos and resources accessed through this platform are governed by their respective platforms. Eduyomi assumes no responsibility.</div></li>
+<li><span class="num">4</span><div class="clause-body"><strong>External Repositories</strong> — Data loaded from GitHub or external sources is the responsibility of the person who configured it.</div></li>
+<li><span class="num">5</span><div class="clause-body"><strong>No Endorsement</strong> — Display of any content does not constitute endorsement by Eduyomi or its creator(s).</div></li>
+</ul></div>
+<div class="card"><div class="label"><span class="dot"></span>Copyright</div><h2>Copyright Notice</h2><div class="divider"></div><p>All trademarks and brand names referenced belong to their respective owners. Eduyomi makes no claim of ownership over any third-party intellectual property.</p></div>
+<div class="footer"><strong>This notice is subject to change without prior notice.</strong><br>Continued use constitutes acceptance of any updated terms.</div>
+</main></body></html>`;
+}
+
+function _getContributorsHTML() {
+  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-custom').trim() || '#7c6af7';
+  return `<!DOCTYPE html><html lang="en" data-theme="${theme}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contributors — Eduyomi</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--accent-custom:${accent};--accent:var(--accent-custom,#7c6af7);--font-display:'Syne',sans-serif;--font-body:'DM Sans',sans-serif;--transition:200ms cubic-bezier(.4,0,.2,1);}
+[data-theme="dark"]{--bg:#0d0e1a;--bg-nav:rgba(13,14,26,.92);--surface:rgba(255,255,255,.05);--border:rgba(255,255,255,.09);--text-primary:#eef0ff;--text-secondary:rgba(238,240,255,.6);--text-muted:rgba(238,240,255,.38);}
+[data-theme="amoled"]{--bg:#000;--bg-nav:rgba(0,0,0,.95);--surface:rgba(255,255,255,.04);--border:rgba(255,255,255,.07);--text-primary:#fff;--text-secondary:rgba(255,255,255,.55);--text-muted:rgba(255,255,255,.3);}
+[data-theme="light"]{--bg:#f5f4fb;--bg-nav:rgba(245,244,251,.92);--surface:rgba(0,0,0,.04);--border:rgba(0,0,0,.09);--text-primary:#13111f;--text-secondary:rgba(19,17,31,.6);--text-muted:rgba(19,17,31,.38);}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:var(--font-body);background:var(--bg);color:var(--text-primary);min-height:100vh;}
+nav{position:sticky;top:0;z-index:10;background:var(--bg-nav);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 20px;height:54px;}
+.back-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);cursor:pointer;}
+.back-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+.nav-title{font-family:var(--font-display);font-size:.9rem;font-weight:700;background:linear-gradient(120deg,var(--accent),#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.page{max-width:720px;margin:0 auto;padding:36px 20px 80px;}
+.hero{text-align:center;margin-bottom:40px;}
+.hero-icon{width:58px;height:58px;border-radius:16px;margin:0 auto 16px;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1.5px solid color-mix(in srgb,var(--accent) 28%,transparent);display:flex;align-items:center;justify-content:center;}
+.hero-icon svg{width:28px;height:28px;stroke:var(--accent);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+h1{font-family:var(--font-display);font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,var(--text-primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px;}
+.sub{font-size:.86rem;color:var(--text-muted);}
+.section-title{font-family:var(--font-display);font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:18px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+.contrib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:32px;}
+.contrib-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 16px;text-align:center;transition:border-color var(--transition),transform .2s;}
+.contrib-card:hover{border-color:color-mix(in srgb,var(--accent) 40%,transparent);transform:translateY(-2px);}
+.avatar{width:52px;height:52px;border-radius:50%;margin:0 auto 10px;background:color-mix(in srgb,var(--accent) 20%,transparent);border:2px solid color-mix(in srgb,var(--accent) 40%,transparent);display:flex;align-items:center;justify-content:center;font-size:1.4rem;}
+.contrib-name{font-weight:700;font-size:.9rem;color:var(--text-primary);margin-bottom:4px;}
+.contrib-role{font-size:.72rem;color:var(--accent);font-weight:600;}
+.note{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;text-align:center;font-size:.84rem;color:var(--text-secondary);line-height:1.7;margin-top:20px;}
+.gh-link{color:var(--accent);text-decoration:none;font-weight:600;}
+.gh-link:hover{text-decoration:underline;}
+</style></head><body>
+<nav><button class="back-btn" onclick="window.parent.postMessage('popup:close','*')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+<span class="nav-title">Eduyomi</span></nav>
+<main class="page">
+<div class="hero"><div class="hero-icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
+<h1>Contributors</h1><p class="sub">People who make Eduyomi possible.</p></div>
+<div class="section-title">Core Team</div>
+<div class="contrib-grid">
+  <div class="contrib-card"><div class="avatar">👨‍💻</div><div class="contrib-name">RahulDasEmon</div><div class="contrib-role">Creator &amp; Lead Dev</div></div>
+</div>
+<div class="note">Want to contribute? Open a pull request or issue on <a class="gh-link" href="https://github.com/RahulDasEmon/rd-last-test" target="_blank">GitHub</a>.<br>Every contribution — big or small — is appreciated! ❤️</div>
+</main></body></html>`;
+}
+
 function openPopup(page) {
   if (_popupCloseTimer) { clearTimeout(_popupCloseTimer); _popupCloseTimer = null; }
 
   const o      = document.getElementById('popup-overlay');
   const loader = document.getElementById('popup-loader');
-
-  // Show spinner
   loader.classList.add('show');
 
-  // Always create a brand-new iframe — eliminates ALL caching/listener/blank-state issues
   const iframe = _freshIframe();
 
-  // Hide spinner exactly once when the new iframe finishes loading
-  iframe.addEventListener('load', function handler() {
-    iframe.removeEventListener('load', handler);
-    loader.classList.remove('show');
-  });
-
-  iframe.src = page;
+  // Check if it's a built-in page — serve inline HTML
+  if (page === 'license.html' || page === 'contributors.html') {
+    const html = page === 'license.html' ? _getLicenseHTML() : _getContributorsHTML();
+    const blob = new Blob([html], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    iframe.addEventListener('load', function handler() {
+      iframe.removeEventListener('load', handler);
+      loader.classList.remove('show');
+      URL.revokeObjectURL(blobUrl);
+    });
+    iframe.src = blobUrl;
+  } else {
+    iframe.addEventListener('load', function handler() {
+      iframe.removeEventListener('load', handler);
+      loader.classList.remove('show');
+    });
+    iframe.src = page;
+  }
 
   o.classList.add('active');
   document.body.style.overflow = 'hidden';
@@ -3324,8 +3424,14 @@ function onYouTubeIframeAPIReady() {
 function onPlayerReady() {
   playerReady = true;
   seekbar.addEventListener('input', () => {
-    if (!mainPlayer?.getDuration) return;
-    mainPlayer.seekTo(mainPlayer.getDuration() * (seekbar.value / 100));
+    if (_useInvidious) {
+      if (_pxPlayer && _pxReady) {
+        try { _pxPlayer.seekTo((_pxPlayer.getDuration()||0) * (seekbar.value / 100), true); } catch(e){}
+      }
+    } else {
+      if (!mainPlayer?.getDuration) return;
+      mainPlayer.seekTo(mainPlayer.getDuration() * (seekbar.value / 100));
+    }
     refreshHudInactivity();
   });
   attachGestureListeners();
@@ -3390,104 +3496,157 @@ async function playTopic(videoId, title) {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   AD-FREE PLAYER  —  Pixora (inv.thepixora.com) fixed instance
-   No auto-switching. No probing. Loads directly, stays locked.
+   AD-FREE PLAYER  —  Native youtube-nocookie iframe
+   Fully integrated with our own player controls:
+   seekbar, speed, quality, play/pause, fullscreen, watch-mark.
 ════════════════════════════════════════════════════════════════ */
 
-const INV_HOST = 'https://inv.thepixora.com';   // ← locked to Pixora only
+let _useInvidious = false;   // renamed internally; true = ad-free mode
+let _pxPlayer     = null;    // YT.Player instance in ad-free mode
+let _pxReady      = false;
+let _pxPollTimer  = null;
+let _pxPendingSeek = null;
 
-let _useInvidious  = false;
-let _invPollTimer  = null;
-let _invStartTime  = null;
-let _invRate       = 1;
-let _invDuration   = 0;
-let _invPausedAt   = 0;
-
-const INV_QUALITY_MAP = {
-  auto:'', hd1080:'1080', hd720:'720', large:'480', medium:'360', small:'240'
-};
-
-/* ── Build Pixora embed URL ── */
-function _invUrl(videoId) {
-  const q = INV_QUALITY_MAP[settingsState.playerQuality || 'auto'] || '';
-  const p = new URLSearchParams({ autoplay:'1', local:'true', listen:'0' });
-  if (q) p.set('quality', q);
-  return `${INV_HOST}/embed/${videoId}?${p}`;
+/* ── Build youtube-nocookie embed URL ── */
+function _pxUrl(videoId) {
+  const qMap = { auto:'', hd1080:'1080p', hd720:'720p', large:'480p', medium:'360p', small:'240p' };
+  const q = qMap[settingsState.playerQuality || 'auto'] || '';
+  return videoId; // we use YT.Player API, URL built internally
 }
 
-/* ── Seekbar poll (elapsed-time based, cross-origin can't be read) ── */
-function _startInvPoll() {
-  _stopInvPoll();
-  let watchMarked = watchedTopics.has(currentVideoId);
-  _invPollTimer = setInterval(() => {
-    if (!_invStartTime || !isVideoPlaying) return;
-    const elapsed = (Date.now() - _invStartTime) / 1000 * _invRate;
-    const dur = _invDuration;
-    if (!dur) return;
-    const p = Math.min((elapsed / dur) * 100, 100);
-    seekbar.value = p;
-    seekbar.style.background =
-      `linear-gradient(to right, var(--accent) ${p}%, rgba(255,255,255,0.15) ${p}%)`;
-    curTimeEl.textContent = formatTime(elapsed);
-    durTimeEl.textContent = formatTime(dur);
-    if (!watchMarked && p >= 75 && settingsState.autoMarkWatched) {
-      watchMarked = true; markVideoWatched(currentVideoId);
-    }
-  }, 400);
-}
-function _stopInvPoll() { clearInterval(_invPollTimer); _invPollTimer = null; }
-
-/* ── Fetch video duration via Pixora API ── */
-async function _fetchDuration(videoId) {
-  try {
-    const r = await fetch(`${INV_HOST}/api/v1/videos/${videoId}?fields=lengthSeconds`);
-    const d = await r.json();
-    _invDuration = d.lengthSeconds || 0;
-    durTimeEl.textContent = formatTime(_invDuration);
-  } catch { _invDuration = 0; }
-}
-
-/* ── Load Pixora iframe — no fallback, no switching ── */
+/* ── Create a fresh YT.Player in the pixora-engine div ── */
 function _loadInvidious(videoId) {
-  const inv = document.getElementById('invidious-engine');
-  inv.src = _invUrl(videoId);
-  inv.style.display = 'block';
+  const container = document.getElementById('pixora-engine');
+  container.innerHTML = '<div id="px-yt-player"></div>';
+  container.style.display = 'block';
   document.getElementById('youtube-engine').style.display = 'none';
-  document.body.classList.add('invidious-mode');
-  _invStartTime = Date.now();
-  _invRate      = parseFloat(settingsState.playerSpeed || '1');
-  _invDuration  = 0;
-  seekbar.style.opacity       = '0.45';
-  seekbar.style.pointerEvents = 'none';
-  showHud();
-  syncSpeedSliderUI(_invRate);
-  syncQualityPillUI(settingsState.playerQuality || 'auto');
+  document.body.classList.add('pixora-mode');
+  _pxReady = false;
   isVideoPlaying = true;
+  showHud();
+  syncSpeedSliderUI(parseFloat(settingsState.playerSpeed || '1'));
+  syncQualityPillUI(settingsState.playerQuality || 'auto');
   document.getElementById('master-pp-btn').innerHTML = 'Ⅱ';
-  _fetchDuration(videoId);
-  _startInvPoll();
-  refreshHudInactivity();
+  seekbar.style.opacity = '1';
+  seekbar.style.pointerEvents = 'auto';
+
+  if (_pxPlayer && typeof _pxPlayer.destroy === 'function') {
+    try { _pxPlayer.destroy(); } catch(e){}
+    _pxPlayer = null;
+  }
+
+  _pxPlayer = new YT.Player('px-yt-player', {
+    width: '100%',
+    height: '100%',
+    videoId: videoId,
+    host: 'https://www.youtube-nocookie.com',
+    playerVars: {
+      autoplay: 1,
+      rel: 0,
+      modestbranding: 1,
+      iv_load_policy: 3,
+      controls: 0,
+      disablekb: 1,
+      fs: 0,
+      playsinline: 1
+    },
+    events: {
+      onReady: function(e) {
+        _pxReady = true;
+        const rate = parseFloat(settingsState.playerSpeed || '1');
+        if (rate !== 1) e.target.setPlaybackRate(rate);
+        const q = settingsState.playerQuality || 'auto';
+        if (q !== 'auto') e.target.setPlaybackQuality(q);
+        if (_pxPendingSeek !== null) { e.target.seekTo(_pxPendingSeek, true); _pxPendingSeek = null; }
+        _startPxPoll();
+        refreshHudInactivity();
+      },
+      onStateChange: function(e) {
+        if (e.data === YT.PlayerState.PLAYING) {
+          isVideoPlaying = true;
+          document.getElementById('master-pp-btn').innerHTML = 'Ⅱ';
+          _startPxPoll();
+        } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
+          isVideoPlaying = false;
+          document.getElementById('master-pp-btn').innerHTML = '▶';
+          _stopPxPoll();
+          if (e.data === YT.PlayerState.ENDED && settingsState.autoPlayNext) {
+            playNextTopic && playNextTopic();
+          }
+        }
+      }
+    }
+  });
+
+  // Make the inner iframe fill the container
+  const style = document.createElement('style');
+  style.id = 'px-fill-style';
+  style.textContent = '#px-yt-player,#px-yt-player iframe{width:100%!important;height:100%!important;border:none!important;}';
+  if (!document.getElementById('px-fill-style')) document.head.appendChild(style);
+
   _syncSourceUI();
 }
 
 function _unloadInvidious() {
-  const inv = document.getElementById('invidious-engine');
-  inv.src   = 'about:blank';
-  inv.style.display = 'none';
+  _stopPxPoll();
+  if (_pxPlayer && typeof _pxPlayer.destroy === 'function') {
+    try { _pxPlayer.destroy(); } catch(e) {}
+    _pxPlayer = null;
+  }
+  _pxReady = false;
+  const container = document.getElementById('pixora-engine');
+  if (container) { container.innerHTML = ''; container.style.display = 'none'; }
   document.getElementById('youtube-engine').style.display = '';
-  document.body.classList.remove('invidious-mode');
-  seekbar.style.opacity       = '';
+  document.body.classList.remove('pixora-mode');
+  seekbar.style.opacity = '';
   seekbar.style.pointerEvents = '';
-  _stopInvPoll();
-  _invStartTime = null;
 }
 
-// Override startTimeTracker so it won't clash in invidious mode
+function _startPxPoll() {
+  _stopPxPoll();
+  let watchMarked = watchedTopics.has(currentVideoId);
+  _pxPollTimer = setInterval(() => {
+    if (!_pxPlayer || !_pxReady || !isVideoPlaying) return;
+    try {
+      const cur = _pxPlayer.getCurrentTime() || 0;
+      const dur = _pxPlayer.getDuration() || 0;
+      if (!dur) return;
+      const pct = Math.min((cur / dur) * 100, 100);
+      seekbar.value = pct;
+      seekbar.style.background = `linear-gradient(to right, var(--accent) ${pct}%, rgba(255,255,255,0.15) ${pct}%)`;
+      curTimeEl.textContent = formatTime(cur);
+      durTimeEl.textContent = formatTime(dur);
+      if (!watchMarked && pct >= 75 && settingsState.autoMarkWatched) {
+        watchMarked = true; markVideoWatched(currentVideoId);
+      }
+    } catch(e){}
+  }, 400);
+}
+function _stopPxPoll() { clearInterval(_pxPollTimer); _pxPollTimer = null; }
+// Backward-compat aliases (used by togglePlayerSource / drawerSetServer calls)
+function _stopInvPoll() { _stopPxPoll(); }
+function _startInvPoll() { _startPxPoll(); }
+
+// Override startTimeTracker so it won't clash in pixora mode
 const _origStartTimeTracker = startTimeTracker;
 startTimeTracker = function() {
-  if (_useInvidious) return; // handled by _startInvPoll
+  if (_useInvidious) return; // handled by _startPxPoll
   _origStartTimeTracker();
 };
+
+// Patch seekbar to work with pixora player
+(function() {
+  const sb = document.getElementById('master-seekbar');
+  if (!sb) return;
+  sb.addEventListener('input', function() {
+    if (!_useInvidious || !_pxPlayer || !_pxReady) return;
+    try {
+      const dur = _pxPlayer.getDuration() || 0;
+      const t = (sb.value / 100) * dur;
+      _pxPlayer.seekTo(t, true);
+    } catch(e){}
+  });
+})();
 
 function doLoadVideo(videoId) {
   const savedQ    = settingsState.playerQuality || 'auto';
@@ -4859,45 +5018,33 @@ function toggleControlsVisible() {
 
 function handlePlayPause(e) {
   e.stopPropagation();
-  if (_useInvidious) {
-    // We can't control cross-origin iframe; toggle our timer instead
+  if (_useInvidious && _pxPlayer && _pxReady) {
     if (isVideoPlaying) {
-      isVideoPlaying = false;
-      _stopInvPoll();
-      stopTimeTracker();
-      // Record elapsed so we can resume
-      if (_invStartTime) _invPausedAt = (Date.now() - _invStartTime) / 1000 * _invRate;
-      document.getElementById('master-pp-btn').innerHTML = '▶';
-      showHud();
+      _pxPlayer.pauseVideo();
     } else {
-      isVideoPlaying = true;
-      _invStartTime = _invPausedAt
-        ? Date.now() - (_invPausedAt / _invRate) * 1000
-        : Date.now();
-      _invPausedAt = 0;
-      document.getElementById('master-pp-btn').innerHTML = 'Ⅱ';
-      _startInvPoll();
-      refreshHudInactivity();
+      _pxPlayer.playVideo();
     }
     return;
   }
-  isVideoPlaying ? mainPlayer.pauseVideo() : mainPlayer.playVideo();
+  if (!_useInvidious) {
+    isVideoPlaying ? mainPlayer.pauseVideo() : mainPlayer.playVideo();
+  }
 }
 
 function stepBackward(e) {
   e.stopPropagation();
-  if (_useInvidious) {
-    if (_invStartTime) _invStartTime += (10 / _invRate) * 1000;
-  } else {
+  if (_useInvidious && _pxPlayer && _pxReady) {
+    try { _pxPlayer.seekTo((_pxPlayer.getCurrentTime()||0) - 10, true); } catch(err){}
+  } else if (!_useInvidious) {
     mainPlayer?.seekTo(mainPlayer.getCurrentTime()-10);
   }
   refreshHudInactivity();
 }
 function stepForward(e) {
   e.stopPropagation();
-  if (_useInvidious) {
-    if (_invStartTime) _invStartTime -= (10 / _invRate) * 1000;
-  } else {
+  if (_useInvidious && _pxPlayer && _pxReady) {
+    try { _pxPlayer.seekTo((_pxPlayer.getCurrentTime()||0) + 10, true); } catch(err){}
+  } else if (!_useInvidious) {
     mainPlayer?.seekTo(mainPlayer.getCurrentTime()+10);
   }
   refreshHudInactivity();
@@ -4964,15 +5111,9 @@ function onSpeedSlider(el) {
   const pct = ((el.value - 25) / (400 - 25)) * 100;
   el.style.background = `linear-gradient(to right, var(--accent) ${pct}%, rgba(255,255,255,0.18) ${pct}%)`;
 
-  if (_useInvidious) {
-    // Update our elapsed-time rate for the poll timer
-    if (_invStartTime) {
-      // Recalibrate: snap elapsed forward so the counter doesn't jump
-      const elapsed = (Date.now() - _invStartTime) / 1000 * _invRate;
-      _invStartTime = Date.now() - (elapsed / rate) * 1000;
-    }
-    _invRate = rate;
-  } else {
+  if (_useInvidious && _pxPlayer && _pxReady) {
+    try { _pxPlayer.setPlaybackRate(rate); } catch(err) {}
+  } else if (!_useInvidious) {
     mainPlayer?.setPlaybackRate(rate);
   }
 
@@ -4999,12 +5140,8 @@ function setQuality(q, btn) {
   settingsState.playerQuality = q;
   saveSettings();
 
-  if (_useInvidious) {
-    // Reload invidious iframe with new quality
-    if (currentVideoId) {
-      _invStartTime = Date.now();
-      document.getElementById('invidious-engine').src = _invUrl(currentVideoId);
-    }
+  if (_useInvidious && _pxPlayer && _pxReady) {
+    try { _pxPlayer.setPlaybackQuality(q); } catch(err){}
     closeAllCtrlPanels();
     return;
   }

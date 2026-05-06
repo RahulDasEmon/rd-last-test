@@ -843,6 +843,19 @@
       transform: scale(1.08);
       transform-origin: center center;
     }
+    /* Invidious mode: allow pointer events on the iframe itself (it has its own controls as fallback) */
+    body.invidious-mode #invidious-engine { pointer-events: auto; }
+    body.invidious-mode #youtube-engine   { display: none !important; }
+    body.invidious-mode #interaction-zone { cursor: default; }
+    /* Source toggle active state */
+    #source-toggle-btn.inv-active {
+      background: rgba(74,222,128,0.15);
+      border-color: rgba(74,222,128,0.5);
+      color: #4ade80;
+    }
+    #source-toggle-btn.inv-active svg { stroke: #4ade80; }
+    /* Quality pills disabled in invidious mode */
+    body.invidious-mode #quality-toggle-btn { opacity: .45; pointer-events: none; }
 
     /* Controls overlay */
     .control-panel {
@@ -2003,6 +2016,13 @@
       </div>
       <div class="video-container" id="interaction-zone" onclick="toggleControlsVisible()">
         <div id="youtube-engine"></div>
+        <iframe id="invidious-engine"
+          src="about:blank"
+          allow="autoplay; fullscreen"
+          allowfullscreen
+          referrerpolicy="no-referrer"
+          style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;z-index:2;">
+        </iframe>
         <div class="control-panel" id="hud">
           <div class="seekbar-box">
             <div class="time-display">
@@ -2029,6 +2049,19 @@
               <button class="ctrl-icon-btn" id="quality-toggle-btn" onclick="toggleCtrlPanel('quality-popup','quality-toggle-btn')" onpointerdown="selectOpen=true;clearTimeout(hudTimer);showHud()">
                 <svg class="cib-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 <span class="cib-val" id="quality-label">Auto</span>
+              </button>
+            </div>
+
+            <!-- Ad-free source toggle -->
+            <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+              <button class="ctrl-icon-btn" id="source-toggle-btn"
+                onclick="togglePlayerSource(event)"
+                title="Switch player source"
+                style="padding:4px 8px;font-size:0.7rem;font-weight:700;letter-spacing:.5px;min-width:68px;justify-content:center;gap:4px;">
+                <svg class="cib-icon" viewBox="0 0 24 24" style="width:13px;height:13px;">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <span id="source-label">YouTube</span>
               </button>
             </div>
 
@@ -3297,9 +3330,124 @@ async function playTopic(videoId, title) {
   }
 }
 
+/* ════════════════════════════════════════
+   DUAL-MODE PLAYER  (Invidious ↔ YouTube)
+════════════════════════════════════════ */
+const INVIDIOUS_HOST = 'https://inv.nadeko.net';
+let   _useInvidious  = false;   // persisted in settingsState.useInvidious
+let   _invPollTimer  = null;    // seekbar polling for invidious mode
+
+// Quality map: our keys → Invidious dash_qualitys
+const INV_QUALITY_MAP = {
+  auto:'',hd1080:'1080',hd720:'720',large:'480',medium:'360',small:'240'
+};
+
+function _invUrl(videoId) {
+  const q = INV_QUALITY_MAP[settingsState.playerQuality || 'auto'] || '';
+  const params = new URLSearchParams({
+    autoplay: '1',
+    local: 'true',
+    listen: '0',
+  });
+  if (q) params.set('quality', q);
+  return `${INVIDIOUS_HOST}/embed/${videoId}?${params}`;
+}
+
+function _startInvPoll() {
+  _stopInvPoll();
+  const inv    = document.getElementById('invidious-engine');
+  let watchMarked = watchedTopics.has(currentVideoId);
+  _invPollTimer = setInterval(() => {
+    // We can't read invidious iframe state cross-origin,
+    // so drive seekbar using a simple elapsed-time counter
+    if (!_invStartTime) return;
+    const elapsed = (Date.now() - _invStartTime) / 1000 * _invRate;
+    const dur     = _invDuration;
+    if (!dur) return;
+    const p = Math.min((elapsed / dur) * 100, 100);
+    seekbar.value = p;
+    seekbar.style.background =
+      `linear-gradient(to right, var(--accent) ${p}%, rgba(255,255,255,0.15) ${p}%)`;
+    curTimeEl.textContent = formatTime(elapsed);
+    durTimeEl.textContent = formatTime(dur);
+    if (!watchMarked && p >= 75 && settingsState.autoMarkWatched) {
+      watchMarked = true;
+      markVideoWatched(currentVideoId);
+    }
+  }, 400);
+}
+function _stopInvPoll() { clearInterval(_invPollTimer); _invPollTimer = null; }
+
+let _invStartTime  = null;   // Date.now() when play began
+let _invRate       = 1;      // current playback rate
+let _invDuration   = 0;      // video duration (fetched via oembed)
+
+async function _fetchDuration(videoId) {
+  try {
+    const r = await fetch(`${INVIDIOUS_HOST}/api/v1/videos/${videoId}?fields=lengthSeconds`);
+    const d = await r.json();
+    _invDuration = d.lengthSeconds || 0;
+    durTimeEl.textContent = formatTime(_invDuration);
+  } catch {
+    // fallback: oembed doesn't give duration; leave as 0
+    _invDuration = 0;
+  }
+}
+
+function _loadInvidious(videoId) {
+  const inv = document.getElementById('invidious-engine');
+  inv.src = _invUrl(videoId);
+  inv.style.display = 'block';
+  document.getElementById('youtube-engine').style.display = 'none';
+  document.body.classList.add('invidious-mode');
+  _invStartTime = Date.now();
+  _invRate      = parseFloat(settingsState.playerSpeed || '1');
+  _invDuration  = 0;
+  // Disable seekbar input in invidious mode (can't seek cross-origin)
+  seekbar.style.opacity = '0.4';
+  seekbar.style.pointerEvents = 'none';
+  // Show HUD
+  showHud();
+  syncSpeedSliderUI(_invRate);
+  syncQualityPillUI(settingsState.playerQuality || 'auto');
+  isVideoPlaying = true;
+  document.getElementById('master-pp-btn').innerHTML = 'Ⅱ';
+  startTimeTracker();          // reuse tracker; it reads _invStartTime
+  _fetchDuration(videoId);
+  _startInvPoll();
+  refreshHudInactivity();
+}
+
+function _unloadInvidious() {
+  const inv = document.getElementById('invidious-engine');
+  inv.src   = 'about:blank';
+  inv.style.display = 'none';
+  document.getElementById('youtube-engine').style.display = '';
+  document.body.classList.remove('invidious-mode');
+  seekbar.style.opacity = '';
+  seekbar.style.pointerEvents = '';
+  _stopInvPoll();
+  _invStartTime = null;
+}
+
+// Override startTimeTracker so it works in invidious mode too
+const _origStartTimeTracker = startTimeTracker;
+startTimeTracker = function() {
+  if (_useInvidious) { /* handled by _startInvPoll */ return; }
+  _origStartTimeTracker();
+};
+
 function doLoadVideo(videoId) {
   const savedQ    = settingsState.playerQuality || 'auto';
   const savedRate = parseFloat(settingsState.playerSpeed || '1');
+
+  if (_useInvidious) {
+    _loadInvidious(videoId);
+    return;
+  }
+
+  // ── YouTube mode ──
+  _unloadInvidious();
   mainPlayer.loadVideoById({
     videoId: videoId,
     suggestedQuality: savedQ === 'auto' ? 'default' : savedQ
@@ -3309,6 +3457,47 @@ function doLoadVideo(videoId) {
   if (savedRate !== 1) mainPlayer.setPlaybackRate(savedRate);
   syncQualityPillUI(savedQ);
 }
+
+/* Toggle between YouTube ↔ Invidious */
+function togglePlayerSource(e) {
+  e && e.stopPropagation();
+  _useInvidious = !_useInvidious;
+  settingsState.useInvidious = _useInvidious;
+  saveSettings();
+  _syncSourceUI();
+  // Reload current video in the new source if one is playing
+  if (currentVideoId) {
+    if (_useInvidious) {
+      if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
+      _loadInvidious(currentVideoId);
+    } else {
+      _stopInvPoll();
+      _unloadInvidious();
+      if (playerReady && mainPlayer?.loadVideoById) {
+        doLoadVideo(currentVideoId);
+      }
+    }
+  }
+}
+
+function _syncSourceUI() {
+  const btn   = document.getElementById('source-toggle-btn');
+  const label = document.getElementById('source-label');
+  if (!btn) return;
+  if (_useInvidious) {
+    btn.classList.add('inv-active');
+    label.textContent = 'Ad-free ✓';
+  } else {
+    btn.classList.remove('inv-active');
+    label.textContent = 'YouTube';
+  }
+}
+
+// Init from saved setting
+(function() {
+  _useInvidious = settingsState.useInvidious === true;
+  _syncSourceUI();
+})();
 
 /* ════════════════════════════════════════
    FULL-POWER AD BLOCKER
@@ -3864,9 +4053,14 @@ function openVideoOnYT(e) {
 
 function closePlayer() {
   videoSect.classList.remove('visible');
-  if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
+  if (_useInvidious) {
+    _unloadInvidious();
+  } else {
+    if (mainPlayer?.pauseVideo) mainPlayer.pauseVideo();
+  }
   isVideoPlaying = false;
   stopTimeTracker();
+  _stopInvPoll();
   document.querySelectorAll('.topic-item').forEach(el => el.classList.remove('playing'));
   currentVideoId = null;
 }
@@ -4554,9 +4748,52 @@ function toggleControlsVisible() {
   else { showHud(); if (isVideoPlaying) refreshHudInactivity(); }
 }
 
-function handlePlayPause(e) { e.stopPropagation(); isVideoPlaying ? mainPlayer.pauseVideo() : mainPlayer.playVideo(); }
-function stepBackward(e) { e.stopPropagation(); mainPlayer?.seekTo(mainPlayer.getCurrentTime()-10); refreshHudInactivity(); }
-function stepForward(e)  { e.stopPropagation(); mainPlayer?.seekTo(mainPlayer.getCurrentTime()+10); refreshHudInactivity(); }
+function handlePlayPause(e) {
+  e.stopPropagation();
+  if (_useInvidious) {
+    // We can't control cross-origin iframe; toggle our timer instead
+    if (isVideoPlaying) {
+      isVideoPlaying = false;
+      _stopInvPoll();
+      stopTimeTracker();
+      // Record elapsed so we can resume
+      if (_invStartTime) _invPausedAt = (Date.now() - _invStartTime) / 1000 * _invRate;
+      document.getElementById('master-pp-btn').innerHTML = '▶';
+      showHud();
+    } else {
+      isVideoPlaying = true;
+      _invStartTime = _invPausedAt
+        ? Date.now() - (_invPausedAt / _invRate) * 1000
+        : Date.now();
+      _invPausedAt = 0;
+      document.getElementById('master-pp-btn').innerHTML = 'Ⅱ';
+      _startInvPoll();
+      refreshHudInactivity();
+    }
+    return;
+  }
+  isVideoPlaying ? mainPlayer.pauseVideo() : mainPlayer.playVideo();
+}
+let _invPausedAt = 0;
+
+function stepBackward(e) {
+  e.stopPropagation();
+  if (_useInvidious) {
+    if (_invStartTime) _invStartTime += (10 / _invRate) * 1000;
+  } else {
+    mainPlayer?.seekTo(mainPlayer.getCurrentTime()-10);
+  }
+  refreshHudInactivity();
+}
+function stepForward(e) {
+  e.stopPropagation();
+  if (_useInvidious) {
+    if (_invStartTime) _invStartTime -= (10 / _invRate) * 1000;
+  } else {
+    mainPlayer?.seekTo(mainPlayer.getCurrentTime()+10);
+  }
+  refreshHudInactivity();
+}
 function toggleCtrlPanel(panelId, btnId) {
   const panel = document.getElementById(panelId);
   const btn   = document.getElementById(btnId);
@@ -4618,7 +4855,19 @@ function onSpeedSlider(el) {
   // Fill track
   const pct = ((el.value - 25) / (400 - 25)) * 100;
   el.style.background = `linear-gradient(to right, var(--accent) ${pct}%, rgba(255,255,255,0.18) ${pct}%)`;
-  mainPlayer?.setPlaybackRate(rate);
+
+  if (_useInvidious) {
+    // Update our elapsed-time rate for the poll timer
+    if (_invStartTime) {
+      // Recalibrate: snap elapsed forward so the counter doesn't jump
+      const elapsed = (Date.now() - _invStartTime) / 1000 * _invRate;
+      _invStartTime = Date.now() - (elapsed / rate) * 1000;
+    }
+    _invRate = rate;
+  } else {
+    mainPlayer?.setPlaybackRate(rate);
+  }
+
   settingsState.playerSpeed = String(rate);
   saveSettings();
   // Sync presets highlight
@@ -4641,10 +4890,20 @@ function setQuality(q, btn) {
   document.getElementById('quality-label').textContent = labelMap[q] || 'Auto';
   settingsState.playerQuality = q;
   saveSettings();
+
+  if (_useInvidious) {
+    // Reload invidious iframe with new quality
+    if (currentVideoId) {
+      _invStartTime = Date.now();
+      document.getElementById('invidious-engine').src = _invUrl(currentVideoId);
+    }
+    closeAllCtrlPanels();
+    return;
+  }
+
   if (!mainPlayer || !currentVideoId) return;
   const currentTime = mainPlayer.getCurrentTime() || 0;
   const wasPlaying  = isVideoPlaying;
-  // Reload video at the suggested quality — the only reliable way in modern YT API
   mainPlayer.loadVideoById({
     videoId: currentVideoId,
     startSeconds: currentTime,
